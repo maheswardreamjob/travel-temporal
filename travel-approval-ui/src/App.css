@@ -91,6 +91,47 @@ body {
   gap: 10px;
 }
 
+/* Header Quick Links */
+.link-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: 12px;
+  font-family: var(--font-sans);
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-decoration: none;
+  color: var(--slate-200);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--glass-border);
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.link-button:hover {
+  transform: translateY(-2px);
+  color: white;
+  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--glass-border-hover);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+}
+
+.github-link:hover {
+  border-color: var(--slate-400);
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.1);
+}
+
+.temporal-link:hover {
+  border-color: var(--primary);
+  box-shadow: 0 0 10px var(--primary-glow);
+}
+
+.swagger-link:hover {
+  border-color: var(--success);
+  box-shadow: 0 0 10px var(--success-glow);
+}
+
 .badge-temporal {
   background: linear-gradient(135deg, var(--primary), var(--accent));
   color: white;

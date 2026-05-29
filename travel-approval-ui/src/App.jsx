@@ -303,10 +303,27 @@ function App() {
     <div className="dashboard-container">
       {/* Dashboard Header */}
       <header style={{ marginBottom: '40px' }}>
-        <h1 className="hero-title">Travel Booking</h1>
-        <div className="hero-subtitle">
-          <span>Reliable distributed transactions orchestrating flight, hotel, and transport bookings.</span>
-          <span className="badge-temporal">Temporal SDK</span>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '20px' }}>
+          <div>
+            <h1 className="hero-title">Travel Booking</h1>
+            <div className="hero-subtitle" style={{ marginBottom: '0px' }}>
+              <span>Reliable distributed transactions orchestrating flight, hotel, and transport bookings.</span>
+              <span className="badge-temporal">Temporal SDK</span>
+            </div>
+          </div>
+          
+          {/* Quick Links Row */}
+          <div className="header-links" style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginTop: '10px' }}>
+            <a href="https://github.com/maheswardreamjob/travel-temporal" target="_blank" rel="noopener noreferrer" className="link-button github-link">
+              <span>🐙</span> GitHub Code
+            </a>
+            <a href="http://localhost:8088/namespaces/default/workflows" target="_blank" rel="noopener noreferrer" className="link-button temporal-link">
+              <span>🔍</span> Temporal UI (Auditing)
+            </a>
+            <a href="http://localhost:9191/swagger-ui/index.html" target="_blank" rel="noopener noreferrer" className="link-button swagger-link">
+              <span>📖</span> Swagger UI
+            </a>
+          </div>
         </div>
       </header>
 
