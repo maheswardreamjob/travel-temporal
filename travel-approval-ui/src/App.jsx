@@ -15,6 +15,7 @@ function App() {
   const [workflowStatus, setWorkflowStatus] = useState('PENDING_START')
   const [isOfflineSimulation, setIsOfflineSimulation] = useState(false)
   const [activeTab, setActiveTab] = useState('application')
+  const [activeSubTab, setActiveSubTab] = useState('temporal')
   
   // Countdown Timer State
   const [countdown, setCountdown] = useState(60) // 1 minute
@@ -312,23 +313,10 @@ function App() {
               <span className="badge-temporal">Temporal SDK</span>
             </div>
           </div>
-          
-          {/* Quick Links Row */}
-          <div className="header-links" style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginTop: '10px' }}>
-            <a href="https://github.com/maheswardreamjob/travel-temporal" target="_blank" rel="noopener noreferrer" className="link-button github-link">
-              <span>🐙</span> GitHub Code
-            </a>
-            <button onClick={() => setActiveTab('auditing')} className={`link-button temporal-link ${activeTab === 'auditing' ? 'active-link' : ''}`}>
-              <span>🔍</span> Temporal UI (Auditing)
-            </button>
-            <button onClick={() => setActiveTab('swagger')} className={`link-button swagger-link ${activeTab === 'swagger' ? 'active-link' : ''}`}>
-              <span>📖</span> Swagger UI
-            </button>
-          </div>
         </div>
       </header>
 
-      {/* Tab Navigation */}
+      {/* Main Tab Navigation */}
       <div className="tab-navigation">
         <button 
           className={`tab-btn ${activeTab === 'application' ? 'active' : ''}`}
@@ -340,13 +328,7 @@ function App() {
           className={`tab-btn ${activeTab === 'auditing' ? 'active' : ''}`}
           onClick={() => setActiveTab('auditing')}
         >
-          <span>🔍</span> Temporal Auditing
-        </button>
-        <button 
-          className={`tab-btn ${activeTab === 'swagger' ? 'active' : ''}`}
-          onClick={() => setActiveTab('swagger')}
-        >
-          <span>📖</span> API Swagger UI
+          <span>🕵️</span> Auditing
         </button>
       </div>
 
@@ -605,47 +587,125 @@ function App() {
         </div>
       )}
 
-      {/* Tab 2: Temporal Auditing */}
+      {/* Tab 2: Auditing with Sub-Tabs */}
       {activeTab === 'auditing' && (
         <div className="tab-content iframe-container">
-          <div className="iframe-header">
-            <div>
-              <h2 className="iframe-title">🕵️ Temporal UI Auditing</h2>
-              <p style={{ margin: '4px 0 0 0', fontSize: '0.85rem', color: 'var(--slate-400)' }}>
-                Track and inspect workflow executions, history logs, and activity payloads in real-time.
-              </p>
-            </div>
-            <a href="http://localhost:8088/namespaces/default/workflows" target="_blank" rel="noopener noreferrer" className="btn-primary" style={{ width: 'auto', padding: '10px 16px', fontSize: '0.85rem' }}>
-              <span>↗️</span> Open in New Tab
-            </a>
+          
+          {/* Sub-tab Navigation */}
+          <div className="sub-tab-navigation" style={{ display: 'flex', gap: '8px', marginBottom: '24px', borderBottom: '1px solid rgba(255, 255, 255, 0.06)', paddingBottom: '12px' }}>
+            <button 
+              className={`sub-tab-btn ${activeSubTab === 'temporal' ? 'active' : ''}`}
+              onClick={() => setActiveSubTab('temporal')}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', borderRadius: '8px',
+                fontFamily: 'var(--font-sans)', fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer',
+                background: activeSubTab === 'temporal' ? 'rgba(255,255,255,0.06)' : 'transparent',
+                color: activeSubTab === 'temporal' ? 'white' : 'var(--slate-400)',
+                border: '1px solid ' + (activeSubTab === 'temporal' ? 'rgba(255,255,255,0.1)' : 'transparent'),
+                boxShadow: activeSubTab === 'temporal' ? '0 2px 8px rgba(0, 0, 0, 0.2)' : 'none',
+                transition: 'all 0.3s'
+              }}
+            >
+              <span>🕵️</span> Temporal UI (Auditing)
+            </button>
+            <button 
+              className={`sub-tab-btn ${activeSubTab === 'swagger' ? 'active' : ''}`}
+              onClick={() => setActiveSubTab('swagger')}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', borderRadius: '8px',
+                fontFamily: 'var(--font-sans)', fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer',
+                background: activeSubTab === 'swagger' ? 'rgba(255,255,255,0.06)' : 'transparent',
+                color: activeSubTab === 'swagger' ? 'white' : 'var(--slate-400)',
+                border: '1px solid ' + (activeSubTab === 'swagger' ? 'rgba(255,255,255,0.1)' : 'transparent'),
+                boxShadow: activeSubTab === 'swagger' ? '0 2px 8px rgba(0, 0, 0, 0.2)' : 'none',
+                transition: 'all 0.3s'
+              }}
+            >
+              <span>📖</span> Swagger UI
+            </button>
+            <button 
+              className={`sub-tab-btn ${activeSubTab === 'github' ? 'active' : ''}`}
+              onClick={() => setActiveSubTab('github')}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', borderRadius: '8px',
+                fontFamily: 'var(--font-sans)', fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer',
+                background: activeSubTab === 'github' ? 'rgba(255,255,255,0.06)' : 'transparent',
+                color: activeSubTab === 'github' ? 'white' : 'var(--slate-400)',
+                border: '1px solid ' + (activeSubTab === 'github' ? 'rgba(255,255,255,0.1)' : 'transparent'),
+                boxShadow: activeSubTab === 'github' ? '0 2px 8px rgba(0, 0, 0, 0.2)' : 'none',
+                transition: 'all 0.3s'
+              }}
+            >
+              <span>🐙</span> GitHub Code
+            </button>
           </div>
-          <iframe 
-            src="http://localhost:8088/namespaces/default/workflows" 
-            title="Temporal Web UI"
-            className="embedded-iframe"
-          />
-        </div>
-      )}
 
-      {/* Tab 3: API Swagger Documentation */}
-      {activeTab === 'swagger' && (
-        <div className="tab-content iframe-container">
-          <div className="iframe-header">
-            <div>
-              <h2 className="iframe-title">📖 API Swagger UI</h2>
-              <p style={{ margin: '4px 0 0 0', fontSize: '0.85rem', color: 'var(--slate-400)' }}>
-                Explore, inspect, and trigger Spring Boot REST endpoints directly using the OpenAPI specification.
-              </p>
+          {/* Sub-tab 1: Temporal Web UI */}
+          {activeSubTab === 'temporal' && (
+            <div className="sub-tab-content" style={{ animation: 'fadeIn 0.4s' }}>
+              <div className="iframe-header">
+                <div>
+                  <h2 className="iframe-title" style={{ fontSize: '1.2rem' }}>🕵️ Temporal UI Auditing</h2>
+                  <p style={{ margin: '4px 0 0 0', fontSize: '0.85rem', color: 'var(--slate-400)' }}>
+                    Track and inspect workflow executions, history logs, and activity payloads in real-time.
+                  </p>
+                </div>
+                <a href="http://localhost:8088/namespaces/default/workflows" target="_blank" rel="noopener noreferrer" className="btn-primary" style={{ width: 'auto', padding: '10px 16px', fontSize: '0.85rem' }}>
+                  <span>↗️</span> Open in New Tab
+                </a>
+              </div>
+              <iframe 
+                src="http://localhost:8088/namespaces/default/workflows" 
+                title="Temporal Web UI"
+                className="embedded-iframe"
+              />
             </div>
-            <a href="http://localhost:9191/swagger-ui/index.html" target="_blank" rel="noopener noreferrer" className="btn-primary" style={{ width: 'auto', padding: '10px 16px', fontSize: '0.85rem' }}>
-              <span>↗️</span> Open in New Tab
-            </a>
-          </div>
-          <iframe 
-            src="http://localhost:9191/swagger-ui/index.html" 
-            title="Swagger API UI"
-            className="embedded-iframe"
-          />
+          )}
+
+          {/* Sub-tab 2: Swagger UI */}
+          {activeSubTab === 'swagger' && (
+            <div className="sub-tab-content" style={{ animation: 'fadeIn 0.4s' }}>
+              <div className="iframe-header">
+                <div>
+                  <h2 className="iframe-title" style={{ fontSize: '1.2rem' }}>📖 API Swagger UI</h2>
+                  <p style={{ margin: '4px 0 0 0', fontSize: '0.85rem', color: 'var(--slate-400)' }}>
+                    Explore, inspect, and trigger Spring Boot REST endpoints directly using the OpenAPI specification.
+                  </p>
+                </div>
+                <a href="http://localhost:9191/swagger-ui/index.html" target="_blank" rel="noopener noreferrer" className="btn-primary" style={{ width: 'auto', padding: '10px 16px', fontSize: '0.85rem' }}>
+                  <span>↗️</span> Open in New Tab
+                </a>
+              </div>
+              <iframe 
+                src="http://localhost:9191/swagger-ui/index.html" 
+                title="Swagger API UI"
+                className="embedded-iframe"
+              />
+            </div>
+          )}
+
+          {/* Sub-tab 3: GitHub Code Info */}
+          {activeSubTab === 'github' && (
+            <div className="sub-tab-content" style={{ padding: '60px 20px', textAlign: 'center', animation: 'fadeIn 0.4s' }}>
+              <div style={{ maxWidth: '600px', margin: '0 auto', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px' }}>
+                <span style={{ fontSize: '4.5rem' }}>🐙</span>
+                <h2 className="iframe-title" style={{ fontSize: '1.5rem', borderBottom: 'none', paddingBottom: 0 }}>GitHub Code Repository</h2>
+                <p style={{ fontSize: '0.95rem', color: 'var(--slate-400)', lineHeight: '1.6', margin: 0 }}>
+                  Access the complete monorepo containing both the Spring Boot backend (`travel_temporal`) and the React UI (`travel-approval-ui`) source code.
+                </p>
+                <a 
+                  href="https://github.com/maheswardreamjob/travel-temporal" 
+                  target="_blank" 
+                  rel="noopener noreferrer" 
+                  className="btn-primary" 
+                  style={{ width: 'auto', padding: '14px 28px', fontSize: '1rem', marginTop: '10px' }}
+                >
+                  <span>↗️</span> Open GitHub Repository
+                </a>
+              </div>
+            </div>
+          )}
+
         </div>
       )}
     </div>
