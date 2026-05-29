@@ -61,15 +61,24 @@ public class TravelWorkflowImpl implements TravelWorkflow {
 
             this.status = "FLIGHT_BOOKING_IN_PROGRESS";
             activities.bookFlight(travelRequest);
-            saga.addCompensation(() -> activities.cancelFlight(travelRequest));
+            saga.addCompensation(() -> {
+                this.status = "COMPENSATING_FLIGHT";
+                activities.cancelFlight(travelRequest);
+            });
 
             this.status = "HOTEL_BOOKING_IN_PROGRESS";
             activities.bookHotel(travelRequest);
-            saga.addCompensation(() -> activities.cancelHotel(travelRequest));
+            saga.addCompensation(() -> {
+                this.status = "COMPENSATING_HOTEL";
+                activities.cancelHotel(travelRequest);
+            });
 
             this.status = "TRANSPORT_ARRANGING_IN_PROGRESS";
             activities.arrangeTransport(travelRequest);
-            saga.addCompensation(() -> activities.cancelTransport(travelRequest));
+            saga.addCompensation(() -> {
+                this.status = "COMPENSATING_TRANSPORT";
+                activities.cancelTransport(travelRequest);
+            });
 
             // Wait for user confirmation for up to 2 minutes. If no signal is
             // received within that window we trigger compensation to cancel
@@ -107,7 +116,7 @@ public class TravelWorkflowImpl implements TravelWorkflow {
             log.error("❌ Error during travel booking for user: {}. Initiating compensation.", travelRequest.getUserId());
             this.status = "COMPENSATING";
             saga.compensate();
-            this.status = "FAILED";
+            this.status = "CANCELLED";
         }
 
         log.info("✅ Travel booking completed for user: {}", travelRequest.getUserId());

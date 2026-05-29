@@ -15,7 +15,7 @@ public class TravelBookingWorkflowStarter {
     private WorkflowServiceStubs serviceStubs;
 
 
-    public void startWorkFlow(TravelRequest travelRequest){
+    public String startWorkFlow(TravelRequest travelRequest){
         WorkflowClient client = WorkflowClient.newInstance(serviceStubs);
 
         TravelWorkflow workflow = client.newWorkflowStub(
@@ -26,7 +26,8 @@ public class TravelBookingWorkflowStarter {
                         .build()
         );
 
-        WorkflowClient.start(workflow::bookTrip, travelRequest);
+        io.temporal.api.common.v1.WorkflowExecution execution = WorkflowClient.start(workflow::bookTrip, travelRequest);
+        return execution.getRunId();
     }
 
 

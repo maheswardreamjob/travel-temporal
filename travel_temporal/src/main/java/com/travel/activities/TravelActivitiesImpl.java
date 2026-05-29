@@ -10,6 +10,10 @@ public class TravelActivitiesImpl implements TravelActivities {
 
     @Override
     public void bookFlight(TravelRequest travelRequest) {
+        if (travelRequest.isSimulateFlightFailure()) {
+            log.warn("⚠️ Simulating Flight Booking Failure for user: {}", travelRequest.getUserId());
+            throw new RuntimeException("Flight booking API timeout or service unavailable!");
+        }
         // rest call to flight service
         log.info("Flight booked for user: {} to destination: {} on date: {}",
                 travelRequest.getUserId(),
@@ -26,6 +30,10 @@ public class TravelActivitiesImpl implements TravelActivities {
 
     @Override
     public void bookHotel(TravelRequest travelRequest) {
+        if (travelRequest.isSimulateHotelFailure()) {
+            log.warn("⚠️ Simulating Hotel Booking Failure for user: {}", travelRequest.getUserId());
+            throw new RuntimeException("Hotel room inventory lock failed!");
+        }
         // gRPC call to hotel service
         log.info("Hotel booked for user: {} at destination: {} on date: {}",
                 travelRequest.getUserId(),
@@ -41,6 +49,10 @@ public class TravelActivitiesImpl implements TravelActivities {
 
     @Override
     public void arrangeTransport(TravelRequest travelRequest) {
+        if (travelRequest.isSimulateTransportFailure()) {
+            log.warn("⚠️ Simulating Local Transport Arranging Failure for user: {}", travelRequest.getUserId());
+            throw new RuntimeException("No executive vehicles available at airport transfer dispatch!");
+        }
         // Kafka message to transport service
 
         log.info("Transport arranged for user: {} at destination: {} on date: {}",

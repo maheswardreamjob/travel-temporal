@@ -9,6 +9,9 @@ function App() {
   const [userId, setUserId] = useState('mahesh_dev')
   const [destination, setDestination] = useState('Tokyo, Japan')
   const [travelDate, setTravelDate] = useState('2026-06-15')
+  const [simulateFlightFailure, setSimulateFlightFailure] = useState(false)
+  const [simulateHotelFailure, setSimulateHotelFailure] = useState(false)
+  const [simulateTransportFailure, setSimulateTransportFailure] = useState(false)
 
   // UI / Workflow States
   const [isBookingActive, setIsBookingActive] = useState(false)
@@ -16,6 +19,10 @@ function App() {
   const [isOfflineSimulation, setIsOfflineSimulation] = useState(false)
   const [activeTab, setActiveTab] = useState('application')
   const [activeSubTab, setActiveSubTab] = useState('temporal')
+  const [workflowId, setWorkflowId] = useState('')
+  const [workflowRunId, setWorkflowRunId] = useState('')
+  const [isBackendOffline, setIsBackendOffline] = useState(false)
+  const isBackendOfflineRef = useRef(false)
   
   // Countdown Timer State
   const [countdown, setCountdown] = useState(60) // 1 minute
@@ -84,12 +91,24 @@ function App() {
         if (!response.ok) throw new Error('Failed to query status')
         const status = await response.text()
         
+        if (isBackendOfflineRef.current) {
+          isBackendOfflineRef.current = false
+          setIsBackendOffline(false)
+          addLog('⚡ [CLIENT] Connection restored! Spring Boot backend is back online.', 'success')
+          addLog('🔄 [CLIENT] Resuming state tracking. Notice how Temporal continues workflow without state loss.', 'success')
+        }
+
         if (status !== lastStatus) {
           handleStatusTransition(status)
           lastStatus = status
         }
       } catch (err) {
-        // Workflow might not be registered yet, or server offline
+        if (!isBackendOfflineRef.current) {
+          isBackendOfflineRef.current = true
+          setIsBackendOffline(true)
+          addLog('❌ [CLIENT] Connection lost! Spring Boot backend is offline.', 'danger')
+          addLog('💡 [DEMO] Temporal workflow state is preserved in Temporal Server. Restart the Spring Boot app to resume!', 'warn')
+        }
         console.error('Polling error:', err)
       }
     }, 1500)
@@ -122,10 +141,18 @@ function App() {
         break
       case 'COMPENSATING':
         addLog('❌ [TRANSACTION] Initiating rollback/compensation due to timeout or failure!', 'danger')
-        addLog('🔄 [ACTIVITY] Executing compensation: Cancelling Transport, Hotel, & Flight...', 'warn')
+        break
+      case 'COMPENSATING_TRANSPORT':
+        addLog('🔄 [ACTIVITY] Saga Compensation: Rollback of local transport reservation in progress...', 'warn')
+        break
+      case 'COMPENSATING_HOTEL':
+        addLog('🔄 [ACTIVITY] Saga Compensation: Rollback of hotel reservation in progress...', 'warn')
+        break
+      case 'COMPENSATING_FLIGHT':
+        addLog('🔄 [ACTIVITY] Saga Compensation: Rollback of flight reservation in progress...', 'warn')
         break
       case 'CANCELLED':
-        addLog('❌ [ACTIVITY] Compensation completed. System returned to clean state.', 'danger')
+        addLog('❌ [ACTIVITY] Rollback compensation completed. System returned to clean state.', 'danger')
         addLog('⏹️ [WORKFLOW] Transaction terminated: CANCELLED (Compensated & Rolled Back)', 'danger')
         stopPolling()
         break
@@ -161,6 +188,8 @@ function App() {
 
     setIsBookingActive(true)
     setWorkflowStatus('PENDING_START')
+    setWorkflowId('')
+    setWorkflowRunId('')
     setLogs([{ time: new Date().toLocaleTimeString(), msg: `🚀 Launching Travel Booking Workflow for User: ${userId}`, type: 'info' }])
 
     if (isOfflineSimulation) {
@@ -172,15 +201,25 @@ function App() {
         const response = await fetch(`${API_BASE}/book`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId, destination, travelDate })
+          body: JSON.stringify({
+            userId,
+            destination,
+            travelDate,
+            simulateFlightFailure,
+            simulateHotelFailure,
+            simulateTransportFailure
+          })
         })
 
         if (!response.ok) {
           throw new Error(`Server returned code: ${response.status}`)
         }
 
-        const msg = await response.text()
-        addLog(`[SERVER] ${msg}`, 'success')
+        const data = await response.json()
+        setWorkflowId(data.workflowId)
+        setWorkflowRunId(data.runId)
+        addLog(`[SERVER] ${data.status}`, 'success')
+        addLog(`[CLIENT] Captured Workflow ID: ${data.workflowId} | Run ID: ${data.runId}`, 'info')
         startStatusPolling(userId)
 
       } catch (err) {
@@ -231,74 +270,194 @@ function App() {
     }
   }
 
-  // Offline Simulator Engine (Fallback)
+  // Action: Terminate Spring Boot JVM (Chaos switch)
+  const handleKillBackend = async () => {
+    addLog('💥 [CLIENT] Initiating Chaos Engine: Terminating Spring Boot JVM...', 'danger')
+    try {
+      fetch(`${API_BASE}/kill`, { method: 'POST' }).catch(() => {})
+      addLog('⚠️ [CLIENT] Kill signal sent. Server is shutting down. Polling will fail...', 'warn')
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
+  // Offline Simulator Engine (Fallback with full failure simulation support)
   const runOfflineSimulation = () => {
-    let step = 0
-    const steps = [
-      { status: 'FLIGHT_BOOKING_IN_PROGRESS', delay: 1500 },
-      { status: 'HOTEL_BOOKING_IN_PROGRESS', delay: 3000 },
-      { status: 'TRANSPORT_ARRANGING_IN_PROGRESS', delay: 4500 },
-      { status: 'PENDING_USER_CONFIRMATION', delay: 6000 }
-    ]
-
-    steps.forEach((s) => {
-      setTimeout(() => {
-        // Ensure another booking hasn't been started or cancelled in between
-        if (isBookingActive) {
-          handleStatusTransition(s.status)
-        }
-      }, s.delay)
-    })
-  }
-
-  const triggerOfflineCompensation = () => {
-    handleStatusTransition('COMPENSATING')
+    setWorkflowId(`travel_${userId}`)
+    setWorkflowRunId('sandbox-run-id-uuid-12345')
+    
+    // Simulate steps sequentially
     setTimeout(() => {
-      handleStatusTransition('CANCELLED')
-    }, 2000)
+      if (!isBookingActive) return;
+      handleStatusTransition('FLIGHT_BOOKING_IN_PROGRESS')
+      
+      setTimeout(() => {
+        if (!isBookingActive) return;
+        if (simulateFlightFailure) {
+          addLog('❌ [ACTIVITY-SIM] Flight booking API timeout or service unavailable!', 'danger')
+          triggerOfflineCompensation('flight')
+          return
+        }
+        handleStatusTransition('HOTEL_BOOKING_IN_PROGRESS')
+        
+        setTimeout(() => {
+          if (!isBookingActive) return;
+          if (simulateHotelFailure) {
+            addLog('❌ [ACTIVITY-SIM] Hotel room inventory lock failed!', 'danger')
+            triggerOfflineCompensation('hotel')
+            return
+          }
+          handleStatusTransition('TRANSPORT_ARRANGING_IN_PROGRESS')
+          
+          setTimeout(() => {
+            if (!isBookingActive) return;
+            if (simulateTransportFailure) {
+              addLog('❌ [ACTIVITY-SIM] No executive vehicles available at airport transfer dispatch!', 'danger')
+              triggerOfflineCompensation('transport')
+              return
+            }
+            handleStatusTransition('PENDING_USER_CONFIRMATION')
+          }, 1500)
+        }, 1500)
+      }, 1500)
+    }, 1000)
   }
 
-  // Saga Step Status Resolvers for UI styling classes
-  const getStepClass = (stepName) => {
-    // Determine mapping based on current workflow status
-    const statusMap = {
-      flight: {
-        active: ['FLIGHT_BOOKING_IN_PROGRESS'],
-        completed: ['HOTEL_BOOKING_IN_PROGRESS', 'TRANSPORT_ARRANGING_IN_PROGRESS', 'PENDING_USER_CONFIRMATION', 'CONFIRMED'],
-        compensating: ['COMPENSATING'],
-        compensated: ['CANCELLED']
-      },
-      hotel: {
-        active: ['HOTEL_BOOKING_IN_PROGRESS'],
-        completed: ['TRANSPORT_ARRANGING_IN_PROGRESS', 'PENDING_USER_CONFIRMATION', 'CONFIRMED'],
-        compensating: ['COMPENSATING'],
-        compensated: ['CANCELLED']
-      },
-      transport: {
-        active: ['TRANSPORT_ARRANGING_IN_PROGRESS'],
-        completed: ['PENDING_USER_CONFIRMATION', 'CONFIRMED'],
-        compensating: ['COMPENSATING'],
-        compensated: ['CANCELLED']
-      },
-      confirm: {
-        active: ['PENDING_USER_CONFIRMATION'],
-        completed: ['CONFIRMED'],
-        compensated: ['CANCELLED']
-      },
-      finalize: {
-        active: [],
-        completed: ['CONFIRMED'],
-        compensated: ['CANCELLED']
-      }
+  const triggerOfflineCompensation = (failedStep) => {
+    handleStatusTransition('COMPENSATING')
+    
+    if (failedStep === 'transport') {
+      setTimeout(() => {
+        handleStatusTransition('COMPENSATING_HOTEL')
+        setTimeout(() => {
+          handleStatusTransition('COMPENSATING_FLIGHT')
+          setTimeout(() => {
+            handleStatusTransition('CANCELLED')
+          }, 1500)
+        }, 1500)
+      }, 1500)
+    } else if (failedStep === 'hotel') {
+      setTimeout(() => {
+        handleStatusTransition('COMPENSATING_FLIGHT')
+        setTimeout(() => {
+          handleStatusTransition('CANCELLED')
+        }, 1500)
+      }, 1500)
+    } else if (failedStep === 'flight') {
+      setTimeout(() => {
+        handleStatusTransition('CANCELLED')
+      }, 1500)
+    } else {
+      // User cancelled at checkpoint
+      setTimeout(() => {
+        handleStatusTransition('COMPENSATING_TRANSPORT')
+        setTimeout(() => {
+          handleStatusTransition('COMPENSATING_HOTEL')
+          setTimeout(() => {
+            handleStatusTransition('COMPENSATING_FLIGHT')
+            setTimeout(() => {
+              handleStatusTransition('CANCELLED')
+            }, 1500)
+          }, 1500)
+        }, 1500)
+      }, 1500)
+    }
+  }
+
+  // Saga Step Status Resolvers for UI styling classes & labels
+  const getStepDetails = (stepName) => {
+    if (!isBookingActive || workflowStatus === 'PENDING_START') {
+      return { className: 'pending', label: 'PENDING' }
     }
 
-    const currentMap = statusMap[stepName]
-    if (!isBookingActive || workflowStatus === 'PENDING_START') return 'pending'
-    if (currentMap.active.includes(workflowStatus)) return 'active'
-    if (currentMap.completed.includes(workflowStatus)) return 'completed'
-    if (workflowStatus === 'COMPENSATING' && currentMap.compensating?.includes('COMPENSATING')) return 'compensating'
-    if (workflowStatus === 'CANCELLED' && currentMap.compensated?.includes('CANCELLED')) return 'compensated-done'
-    return 'pending'
+    if (stepName === 'flight') {
+      if (workflowStatus === 'FLIGHT_BOOKING_IN_PROGRESS') {
+        return { className: 'active', label: 'BOOKING...' }
+      }
+      if (workflowStatus === 'COMPENSATING_FLIGHT') {
+        return { className: 'compensating', label: 'COMPENSATING...' }
+      }
+      if (['HOTEL_BOOKING_IN_PROGRESS', 'TRANSPORT_ARRANGING_IN_PROGRESS', 'PENDING_USER_CONFIRMATION', 'CONFIRMED', 'COMPENSATING_TRANSPORT', 'COMPENSATING_HOTEL'].includes(workflowStatus)) {
+        return { className: 'completed', label: 'COMPLETED' }
+      }
+      if (workflowStatus === 'CANCELLED') {
+        return simulateFlightFailure ? { className: 'failed', label: 'FAILED' } : { className: 'compensated-done', label: 'COMPENSATED' }
+      }
+      return { className: 'pending', label: 'PENDING' }
+    }
+
+    if (stepName === 'hotel') {
+      if (workflowStatus === 'HOTEL_BOOKING_IN_PROGRESS') {
+        return { className: 'active', label: 'BOOKING...' }
+      }
+      if (workflowStatus === 'COMPENSATING_HOTEL') {
+        return { className: 'compensating', label: 'COMPENSATING...' }
+      }
+      if (['TRANSPORT_ARRANGING_IN_PROGRESS', 'PENDING_USER_CONFIRMATION', 'CONFIRMED', 'COMPENSATING_TRANSPORT'].includes(workflowStatus)) {
+        return { className: 'completed', label: 'COMPLETED' }
+      }
+      if (workflowStatus === 'CANCELLED') {
+        if (simulateHotelFailure) return { className: 'failed', label: 'FAILED' }
+        if (simulateFlightFailure) return { className: 'pending', label: 'SKIPPED' }
+        return { className: 'compensated-done', label: 'COMPENSATED' }
+      }
+      if (workflowStatus === 'COMPENSATING_FLIGHT') {
+        return simulateHotelFailure ? { className: 'failed', label: 'FAILED' } : { className: 'compensated-done', label: 'COMPENSATED' }
+      }
+      return { className: 'pending', label: 'PENDING' }
+    }
+
+    if (stepName === 'transport') {
+      if (workflowStatus === 'TRANSPORT_ARRANGING_IN_PROGRESS') {
+        return { className: 'active', label: 'ARRANGING...' }
+      }
+      if (workflowStatus === 'COMPENSATING_TRANSPORT') {
+        return { className: 'compensating', label: 'COMPENSATING...' }
+      }
+      if (['PENDING_USER_CONFIRMATION', 'CONFIRMED'].includes(workflowStatus)) {
+        return { className: 'completed', label: 'COMPLETED' }
+      }
+      if (workflowStatus === 'CANCELLED') {
+        if (simulateTransportFailure) return { className: 'failed', label: 'FAILED' }
+        if (simulateFlightFailure || simulateHotelFailure) return { className: 'pending', label: 'SKIPPED' }
+        return { className: 'compensated-done', label: 'COMPENSATED' }
+      }
+      if (['COMPENSATING_FLIGHT', 'COMPENSATING_HOTEL'].includes(workflowStatus)) {
+        return simulateTransportFailure ? { className: 'failed', label: 'FAILED' } : { className: 'compensated-done', label: 'COMPENSATED' }
+      }
+      return { className: 'pending', label: 'PENDING' }
+    }
+
+    if (stepName === 'confirm') {
+      if (workflowStatus === 'PENDING_USER_CONFIRMATION') {
+        return { className: 'active', label: 'AWAITING APPROVAL' }
+      }
+      if (workflowStatus === 'CONFIRMED') {
+        return { className: 'completed', label: 'APPROVED' }
+      }
+      if (workflowStatus === 'CANCELLED') {
+        if (simulateFlightFailure || simulateHotelFailure || simulateTransportFailure) {
+          return { className: 'pending', label: 'SKIPPED' }
+        }
+        return { className: 'failed', label: 'REJECTED' }
+      }
+      if (['COMPENSATING_FLIGHT', 'COMPENSATING_HOTEL', 'COMPENSATING_TRANSPORT'].includes(workflowStatus)) {
+        return { className: 'failed', label: 'CANCELLED' }
+      }
+      return { className: 'pending', label: 'PENDING' }
+    }
+
+    if (stepName === 'finalize') {
+      if (workflowStatus === 'CONFIRMED') {
+        return { className: 'completed', label: 'SUCCESS' }
+      }
+      if (workflowStatus === 'CANCELLED') {
+        return { className: 'failed', label: 'ABORTED' }
+      }
+      return { className: 'pending', label: 'PENDING' }
+    }
+
+    return { className: 'pending', label: 'PENDING' }
   }
 
   return (
@@ -424,10 +583,68 @@ function App() {
                   />
                 </div>
 
+                {/* Chaos Simulation Section */}
+                <div className="form-group" style={{ marginTop: '24px', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '20px' }}>
+                  <label className="form-label" style={{ color: 'var(--danger)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span>☣️</span> Chaos Simulation (Force API Failures)
+                  </label>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '12px' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.9rem', color: 'var(--slate-300)', cursor: 'pointer' }}>
+                      <input 
+                        type="checkbox" 
+                        checked={simulateFlightFailure}
+                        onChange={(e) => {
+                          setSimulateFlightFailure(e.target.checked)
+                          if (e.target.checked) {
+                            setSimulateHotelFailure(false)
+                            setSimulateTransportFailure(false)
+                          }
+                        }}
+                        disabled={isBookingActive && !['CONFIRMED', 'CANCELLED', 'FAILED', 'NOT_FOUND'].includes(workflowStatus)}
+                        style={{ width: '16px', height: '16px', accentColor: 'var(--danger)' }}
+                      />
+                      Simulate Flight API Failure
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.9rem', color: 'var(--slate-300)', cursor: 'pointer' }}>
+                      <input 
+                        type="checkbox" 
+                        checked={simulateHotelFailure}
+                        onChange={(e) => {
+                          setSimulateHotelFailure(e.target.checked)
+                          if (e.target.checked) {
+                            setSimulateFlightFailure(false)
+                            setSimulateTransportFailure(false)
+                          }
+                        }}
+                        disabled={isBookingActive && !['CONFIRMED', 'CANCELLED', 'FAILED', 'NOT_FOUND'].includes(workflowStatus)}
+                        style={{ width: '16px', height: '16px', accentColor: 'var(--danger)' }}
+                      />
+                      Simulate Hotel API Failure
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.9rem', color: 'var(--slate-300)', cursor: 'pointer' }}>
+                      <input 
+                        type="checkbox" 
+                        checked={simulateTransportFailure}
+                        onChange={(e) => {
+                          setSimulateTransportFailure(e.target.checked)
+                          if (e.target.checked) {
+                            setSimulateFlightFailure(false)
+                            setSimulateHotelFailure(false)
+                          }
+                        }}
+                        disabled={isBookingActive && !['CONFIRMED', 'CANCELLED', 'FAILED', 'NOT_FOUND'].includes(workflowStatus)}
+                        style={{ width: '16px', height: '16px', accentColor: 'var(--danger)' }}
+                      />
+                      Simulate Transport API Failure
+                    </label>
+                  </div>
+                </div>
+
                 <button 
                   type="submit" 
                   className="btn-primary"
                   disabled={isBookingActive && !['CONFIRMED', 'CANCELLED', 'FAILED', 'NOT_FOUND'].includes(workflowStatus)}
+                  style={{ marginTop: '20px' }}
                 >
                   <span>🚀</span> Start Booking Process
                 </button>
@@ -439,6 +656,11 @@ function App() {
                   onClick={() => {
                     setIsBookingActive(false)
                     setWorkflowStatus('PENDING_START')
+                    setWorkflowId('')
+                    setWorkflowRunId('')
+                    setSimulateFlightFailure(false)
+                    setSimulateHotelFailure(false)
+                    setSimulateTransportFailure(false)
                     addLog('Dashboard reset. Ready for next request.', 'info')
                   }}
                   style={{ marginTop: '16px', background: 'var(--slate-800)', boxShadow: 'none', border: '1px solid var(--slate-700)' }}
@@ -472,67 +694,116 @@ function App() {
                 )}
               </div>
 
+              {isBookingActive && (
+                <div className="workflow-meta" style={{
+                  display: 'flex', gap: '16px', flexWrap: 'wrap',
+                  marginBottom: '20px', padding: '12px 16px', borderRadius: '8px',
+                  background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.05)',
+                  fontFamily: 'var(--font-mono)', fontSize: '0.8rem', color: 'var(--slate-300)',
+                  justifyContent: 'space-between', alignItems: 'center'
+                }}>
+                  <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+                    <div><span style={{ color: 'var(--primary)' }}>Workflow ID:</span> {workflowId || `travel_${userId}`}</div>
+                    <div><span style={{ color: 'var(--primary)' }}>Run ID:</span> {workflowRunId || (isOfflineSimulation ? 'sandbox-run-id-uuid-12345' : 'Loading...')}</div>
+                  </div>
+                  {isBackendOffline && (
+                    <div style={{
+                      backgroundColor: 'rgba(239, 68, 68, 0.15)', color: 'var(--danger)',
+                      padding: '2px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold',
+                      animation: 'pulse-danger 1.5s infinite', border: '1px solid rgba(239, 68, 68, 0.3)'
+                    }}>
+                      🔴 Server Offline
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div className="pipeline-container">
                 
                 {/* Step 1: Flight */}
-                <div className={`pipeline-step ${getStepClass('flight')} ${['HOTEL_BOOKING_IN_PROGRESS', 'TRANSPORT_ARRANGING_IN_PROGRESS', 'PENDING_USER_CONFIRMATION', 'CONFIRMED'].includes(workflowStatus) ? 'completed' : ''} ${workflowStatus === 'COMPENSATING' || workflowStatus === 'CANCELLED' ? 'compensated' : ''}`}>
-                  <div className="step-circle">✈️</div>
-                  <div className="step-content">
-                    <div className="step-header">
-                      <h4 className="step-title">Book Flight</h4>
-                      <span className={`step-status ${getStepClass('flight')}`}>{getStepClass('flight')}</span>
+                {(() => {
+                  const details = getStepDetails('flight');
+                  return (
+                    <div className={`pipeline-step ${details.className}`}>
+                      <div className="step-circle">✈️</div>
+                      <div className="step-content">
+                        <div className="step-header">
+                          <h4 className="step-title">Book Flight</h4>
+                          <span className={`step-status ${details.className}`}>{details.label}</span>
+                        </div>
+                        <p className="step-desc">Reserves airline seat to destination. Comp: `cancelFlight`</p>
+                      </div>
                     </div>
-                    <p className="step-desc">Reserves airline seat to destination. Comp: `cancelFlight`</p>
-                  </div>
-                </div>
+                  );
+                })()}
 
                 {/* Step 2: Hotel */}
-                <div className={`pipeline-step ${getStepClass('hotel')} ${['TRANSPORT_ARRANGING_IN_PROGRESS', 'PENDING_USER_CONFIRMATION', 'CONFIRMED'].includes(workflowStatus) ? 'completed' : ''} ${workflowStatus === 'COMPENSATING' || workflowStatus === 'CANCELLED' ? 'compensated' : ''}`}>
-                  <div className="step-circle">🏨</div>
-                  <div className="step-content">
-                    <div className="step-header">
-                      <h4 className="step-title">Book Hotel</h4>
-                      <span className={`step-status ${getStepClass('hotel')}`}>{getStepClass('hotel')}</span>
+                {(() => {
+                  const details = getStepDetails('hotel');
+                  return (
+                    <div className={`pipeline-step ${details.className}`}>
+                      <div className="step-circle">🏨</div>
+                      <div className="step-content">
+                        <div className="step-header">
+                          <h4 className="step-title">Book Hotel</h4>
+                          <span className={`step-status ${details.className}`}>{details.label}</span>
+                        </div>
+                        <p className="step-desc">Books double-room room for target dates. Comp: `cancelHotel`</p>
+                      </div>
                     </div>
-                    <p className="step-desc">Books double-room room for target dates. Comp: `cancelHotel`</p>
-                  </div>
-                </div>
+                  );
+                })()}
 
                 {/* Step 3: Local Transport */}
-                <div className={`pipeline-step ${getStepClass('transport')} ${['PENDING_USER_CONFIRMATION', 'CONFIRMED'].includes(workflowStatus) ? 'completed' : ''} ${workflowStatus === 'COMPENSATING' || workflowStatus === 'CANCELLED' ? 'compensated' : ''}`}>
-                  <div className="step-circle">🚗</div>
-                  <div className="step-content">
-                    <div className="step-header">
-                      <h4 className="step-title">Arrange Local Transport</h4>
-                      <span className={`step-status ${getStepClass('transport')}`}>{getStepClass('transport')}</span>
+                {(() => {
+                  const details = getStepDetails('transport');
+                  return (
+                    <div className={`pipeline-step ${details.className}`}>
+                      <div className="step-circle">🚗</div>
+                      <div className="step-content">
+                        <div className="step-header">
+                          <h4 className="step-title">Arrange Local Transport</h4>
+                          <span className={`step-status ${details.className}`}>{details.label}</span>
+                        </div>
+                        <p className="step-desc">Dispatches executive airport transfer. Comp: `cancelTransport`</p>
+                      </div>
                     </div>
-                    <p className="step-desc">Dispatches executive airport transfer. Comp: `cancelTransport`</p>
-                  </div>
-                </div>
+                  );
+                })()}
 
                 {/* Step 4: User Confirmation Signal */}
-                <div className={`pipeline-step ${getStepClass('confirm')}`}>
-                  <div className="step-circle">⏳</div>
-                  <div className="step-content">
-                    <div className="step-header">
-                      <h4 className="step-title">User Approval Checkpoint</h4>
-                      <span className={`step-status ${getStepClass('confirm')}`}>{getStepClass('confirm')}</span>
+                {(() => {
+                  const details = getStepDetails('confirm');
+                  return (
+                    <div className={`pipeline-step ${details.className}`}>
+                      <div className="step-circle">⏳</div>
+                      <div className="step-content">
+                        <div className="step-header">
+                          <h4 className="step-title">User Approval Checkpoint</h4>
+                          <span className={`step-status ${details.className}`}>{details.label}</span>
+                        </div>
+                        <p className="step-desc">Awaits manual confirmation. Initiates compensation if timeout occurs.</p>
+                      </div>
                     </div>
-                    <p className="step-desc">Awaits manual confirmation. Initiates compensation if timeout occurs.</p>
-                  </div>
-                </div>
+                  );
+                })()}
 
                 {/* Step 5: Finalized */}
-                <div className={`pipeline-step ${getStepClass('finalize')}`}>
-                  <div className="step-circle">🎉</div>
-                  <div className="step-content">
-                    <div className="step-header">
-                      <h4 className="step-title">Finalize Travel Booking</h4>
-                      <span className={`step-status ${getStepClass('finalize')}`}>{getStepClass('finalize')}</span>
+                {(() => {
+                  const details = getStepDetails('finalize');
+                  return (
+                    <div className={`pipeline-step ${details.className}`}>
+                      <div className="step-circle">🎉</div>
+                      <div className="step-content">
+                        <div className="step-header">
+                          <h4 className="step-title">Finalize Travel Booking</h4>
+                          <span className={`step-status ${details.className}`}>{details.label}</span>
+                        </div>
+                        <p className="step-desc">Commits booking ledger. Completes workflow successfully.</p>
+                      </div>
                     </div>
-                    <p className="step-desc">Commits booking ledger. Completes workflow successfully.</p>
-                  </div>
-                </div>
+                  );
+                })()}
 
               </div>
 
@@ -559,6 +830,29 @@ function App() {
                     </button>
                   </div>
                 </div>
+              )}
+              {isBookingActive && !isOfflineSimulation && !['CONFIRMED', 'CANCELLED', 'FAILED', 'NOT_FOUND'].includes(workflowStatus) && (
+                <button 
+                  className="btn-kill"
+                  onClick={handleKillBackend}
+                  style={{
+                    marginTop: '20px',
+                    width: '100%',
+                    padding: '12px',
+                    borderRadius: '10px',
+                    border: '1px solid rgba(239, 68, 68, 0.3)',
+                    fontFamily: 'var(--font-heading)',
+                    fontWeight: 700,
+                    fontSize: '0.95rem',
+                    cursor: 'pointer',
+                    background: 'rgba(239, 68, 68, 0.1)',
+                    color: 'var(--danger)',
+                    boxShadow: 'none',
+                    transition: 'all 0.3s'
+                  }}
+                >
+                  💥 Kill Spring Boot Worker Instance
+                </button>
               )}
             </div>
 
