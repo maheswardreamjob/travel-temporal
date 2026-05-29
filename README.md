@@ -62,11 +62,16 @@ sequenceDiagram
 ## 📁 Projects Explanation
 
 ### 💻 1. Frontend: `travel-approval-ui`
-A sleek, premium, glassmorphic dashboard built using React and Vite.
-* **Real-time Pipeline Tracker**: Visually highlights the active step of the Saga transaction (Flight -> Hotel -> Transport -> Approval -> Finalize) with active pulsing glows and status badges.
-* **Worker Log Console**: Simulates terminal logs directly on the web page, making it incredibly clear to see when activities are executed, registered for compensation, or rolled back.
-* **Offline Sandbox Mode**: Allows developer testing by simulating the backend workflow state machine in the browser when the Spring Boot server is offline.
-* **Signal Integration**: Connects to the Spring Boot endpoints to dispatch confirmation or cancellation signals to Temporal.
+A sleek, premium, glassmorphic portal built using React and Vite, featuring a two-level tab layout to avoid visual clutter:
+- **Application Tab (Default)**:
+  * **Real-time Pipeline Tracker**: Visually highlights the active step of the Saga transaction (Flight -> Hotel -> Transport -> Approval -> Finalize) with active pulsing glows and status badges.
+  * **Worker Log Console**: Simulates terminal logs directly on the web page, making it incredibly clear to see when activities are executed, registered for compensation, or rolled back.
+  * **Offline Sandbox Mode**: Allows developer testing by simulating the backend workflow state machine in the browser.
+  * **Signal Integration**: Connects to the Spring Boot endpoints to dispatch confirmation or cancellation signals to Temporal.
+- **Auditing Tab**: Aggregates external project components in one place via nested sub-tabs:
+  * **Temporal UI (Auditing)**: Embeds the local Temporal dev server console directly inside the application via an iframe to track workflow execution histories.
+  * **Swagger UI**: Embeds the backend OpenAPI spec Swagger console to run REST calls directly.
+  * **GitHub Code**: Displays a card interface detailing the monorepo content and linking directly to the repository.
 
 ### ☕ 2. Backend: `travel_temporal`
 A Java backend built on Spring Boot, integrated with the Temporal SDK.
