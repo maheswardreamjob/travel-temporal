@@ -14,6 +14,7 @@ function App() {
   const [isBookingActive, setIsBookingActive] = useState(false)
   const [workflowStatus, setWorkflowStatus] = useState('PENDING_START')
   const [isOfflineSimulation, setIsOfflineSimulation] = useState(false)
+  const [activeTab, setActiveTab] = useState('application')
   
   // Countdown Timer State
   const [countdown, setCountdown] = useState(60) // 1 minute
@@ -317,270 +318,336 @@ function App() {
             <a href="https://github.com/maheswardreamjob/travel-temporal" target="_blank" rel="noopener noreferrer" className="link-button github-link">
               <span>🐙</span> GitHub Code
             </a>
-            <a href="http://localhost:8088/namespaces/default/workflows" target="_blank" rel="noopener noreferrer" className="link-button temporal-link">
+            <button onClick={() => setActiveTab('auditing')} className={`link-button temporal-link ${activeTab === 'auditing' ? 'active-link' : ''}`}>
               <span>🔍</span> Temporal UI (Auditing)
-            </a>
-            <a href="http://localhost:9191/swagger-ui/index.html" target="_blank" rel="noopener noreferrer" className="link-button swagger-link">
+            </button>
+            <button onClick={() => setActiveTab('swagger')} className={`link-button swagger-link ${activeTab === 'swagger' ? 'active-link' : ''}`}>
               <span>📖</span> Swagger UI
-            </a>
+            </button>
           </div>
         </div>
       </header>
 
-      {/* Main Grid */}
-      <div className="dashboard-grid">
-        
-        {/* Left Column: Form & Controller Panel */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '30px' }}>
-          
-          {/* Simulation Toggle card */}
-          <div className="glass-card" style={{ padding: '20px 30px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <h3 style={{ margin: '0 0 4px 0', fontSize: '1rem', color: 'var(--slate-50)' }}>
-                  {isOfflineSimulation ? '🔌 Sandbox Mode Active' : '⚡ Live Temporal API'}
-                </h3>
-                <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--slate-400)' }}>
-                  {isOfflineSimulation ? 'Simulating workflows locally in frontend.' : 'Connecting to Spring Boot on port 9191.'}
-                </p>
+      {/* Tab Navigation */}
+      <div className="tab-navigation">
+        <button 
+          className={`tab-btn ${activeTab === 'application' ? 'active' : ''}`}
+          onClick={() => setActiveTab('application')}
+        >
+          <span>🎫</span> Application
+        </button>
+        <button 
+          className={`tab-btn ${activeTab === 'auditing' ? 'active' : ''}`}
+          onClick={() => setActiveTab('auditing')}
+        >
+          <span>🔍</span> Temporal Auditing
+        </button>
+        <button 
+          className={`tab-btn ${activeTab === 'swagger' ? 'active' : ''}`}
+          onClick={() => setActiveTab('swagger')}
+        >
+          <span>📖</span> API Swagger UI
+        </button>
+      </div>
+
+      {/* Tab Contents */}
+      {activeTab === 'application' && (
+        <div className="tab-content dashboard-grid">
+          {/* Left Column: Form & Controller Panel */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '30px' }}>
+            
+            {/* Simulation Toggle card */}
+            <div className="glass-card" style={{ padding: '20px 30px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <h3 style={{ margin: '0 0 4px 0', fontSize: '1rem', color: 'var(--slate-50)' }}>
+                    {isOfflineSimulation ? '🔌 Sandbox Mode Active' : '⚡ Live Temporal API'}
+                  </h3>
+                  <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--slate-400)' }}>
+                    {isOfflineSimulation ? 'Simulating workflows locally in frontend.' : 'Connecting to Spring Boot on port 9191.'}
+                  </p>
+                </div>
+                <label className="switch" style={{ position: 'relative', display: 'inline-block', width: '50px', height: '26px' }}>
+                  <input 
+                    type="checkbox" 
+                    checked={isOfflineSimulation} 
+                    onChange={(e) => {
+                      setIsOfflineSimulation(e.target.checked)
+                      addLog(e.target.checked ? '🔌 Sandbox Mode enabled. Offline visual demo.' : '⚡ Connected Mode enabled. Target: http://localhost:9191.', 'warn')
+                    }}
+                    disabled={isBookingActive && ['FLIGHT_BOOKING_IN_PROGRESS', 'HOTEL_BOOKING_IN_PROGRESS', 'TRANSPORT_ARRANGING_IN_PROGRESS', 'PENDING_USER_CONFIRMATION'].includes(workflowStatus)}
+                    style={{ opacity: 0, width: 0, height: 0 }}
+                  />
+                  <span className="slider" style={{
+                    position: 'absolute', cursor: 'pointer', top: 0, left: 0, right: 0, bottom: 0,
+                    backgroundColor: isOfflineSimulation ? 'var(--primary)' : '#1e293b',
+                    borderRadius: '34px', transition: '.4s',
+                    boxShadow: isOfflineSimulation ? '0 0 10px var(--primary-glow)' : 'none'
+                  }}>
+                    <span style={{
+                      position: 'absolute', content: '""', height: '18px', width: '18px', left: '4px', bottom: '4px',
+                      backgroundColor: 'white', borderRadius: '50%', transition: '.4s',
+                      transform: isOfflineSimulation ? 'translateX(24px)' : 'translateX(0)'
+                    }}></span>
+                  </span>
+                </label>
               </div>
-              <label className="switch" style={{ position: 'relative', display: 'inline-block', width: '50px', height: '26px' }}>
-                <input 
-                  type="checkbox" 
-                  checked={isOfflineSimulation} 
-                  onChange={(e) => {
-                    setIsOfflineSimulation(e.target.checked)
-                    addLog(e.target.checked ? '🔌 Sandbox Mode enabled. Offline visual demo.' : '⚡ Connected Mode enabled. Target: http://localhost:9191.', 'warn')
+            </div>
+
+            {/* Form Card */}
+            <div className="glass-card">
+              <h2 className="card-title">
+                <span style={{ fontSize: '1.5rem' }}>🎫</span> New Booking Request
+              </h2>
+              
+              <form onSubmit={handleStartBooking}>
+                <div className="form-group">
+                  <label className="form-label">User ID / Handle</label>
+                  <input 
+                    type="text" 
+                    className="form-input" 
+                    value={userId}
+                    onChange={(e) => setUserId(e.target.value.replace(/\s+/g, '_'))}
+                    placeholder="e.g. mahesh_dev"
+                    disabled={isBookingActive && !['CONFIRMED', 'CANCELLED', 'FAILED', 'NOT_FOUND'].includes(workflowStatus)}
+                    required 
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Destination</label>
+                  <select 
+                    className="form-input" 
+                    value={destination}
+                    onChange={(e) => setDestination(e.target.value)}
+                    disabled={isBookingActive && !['CONFIRMED', 'CANCELLED', 'FAILED', 'NOT_FOUND'].includes(workflowStatus)}
+                  >
+                    <option value="Tokyo, Japan">Tokyo, Japan (HND)</option>
+                    <option value="Paris, France">Paris, France (CDG)</option>
+                    <option value="London, United Kingdom">London, UK (LHR)</option>
+                    <option value="Bali, Indonesia">Bali, Indonesia (DPS)</option>
+                    <option value="New York, USA">New York, USA (JFK)</option>
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Travel Date</label>
+                  <input 
+                    type="date" 
+                    className="form-input" 
+                    value={travelDate}
+                    onChange={(e) => setTravelDate(e.target.value)}
+                    disabled={isBookingActive && !['CONFIRMED', 'CANCELLED', 'FAILED', 'NOT_FOUND'].includes(workflowStatus)}
+                    required
+                  />
+                </div>
+
+                <button 
+                  type="submit" 
+                  className="btn-primary"
+                  disabled={isBookingActive && !['CONFIRMED', 'CANCELLED', 'FAILED', 'NOT_FOUND'].includes(workflowStatus)}
+                >
+                  <span>🚀</span> Start Booking Process
+                </button>
+              </form>
+
+              {isBookingActive && ['CONFIRMED', 'CANCELLED', 'FAILED', 'NOT_FOUND'].includes(workflowStatus) && (
+                <button 
+                  className="btn-primary" 
+                  onClick={() => {
+                    setIsBookingActive(false)
+                    setWorkflowStatus('PENDING_START')
+                    addLog('Dashboard reset. Ready for next request.', 'info')
                   }}
-                  disabled={isBookingActive && ['FLIGHT_BOOKING_IN_PROGRESS', 'HOTEL_BOOKING_IN_PROGRESS', 'TRANSPORT_ARRANGING_IN_PROGRESS', 'PENDING_USER_CONFIRMATION'].includes(workflowStatus)}
-                  style={{ opacity: 0, width: 0, height: 0 }}
-                />
-                <span className="slider" style={{
-                  position: 'absolute', cursor: 'pointer', top: 0, left: 0, right: 0, bottom: 0,
-                  backgroundColor: isOfflineSimulation ? 'var(--primary)' : '#1e293b',
-                  borderRadius: '34px', transition: '.4s',
-                  boxShadow: isOfflineSimulation ? '0 0 10px var(--primary-glow)' : 'none'
-                }}>
-                  <span style={{
-                    position: 'absolute', content: '""', height: '18px', width: '18px', left: '4px', bottom: '4px',
-                    backgroundColor: 'white', borderRadius: '50%', transition: '.4s',
-                    transform: isOfflineSimulation ? 'translateX(24px)' : 'translateX(0)'
-                  }}></span>
-                </span>
-              </label>
+                  style={{ marginTop: '16px', background: 'var(--slate-800)', boxShadow: 'none', border: '1px solid var(--slate-700)' }}
+                >
+                  🔄 Reset Dashboard
+                </button>
+              )}
             </div>
           </div>
 
-          {/* Form Card */}
-          <div className="glass-card">
-            <h2 className="card-title">
-              <span style={{ fontSize: '1.5rem' }}>🎫</span> New Booking Request
-            </h2>
+          {/* Right Column: Visual Pipeline Tracker & Real-Time Console */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '30px' }}>
             
-            <form onSubmit={handleStartBooking}>
-              <div className="form-group">
-                <label className="form-label">User ID / Handle</label>
-                <input 
-                  type="text" 
-                  className="form-input" 
-                  value={userId}
-                  onChange={(e) => setUserId(e.target.value.replace(/\s+/g, '_'))}
-                  placeholder="e.g. mahesh_dev"
-                  disabled={isBookingActive && !['CONFIRMED', 'CANCELLED', 'FAILED', 'NOT_FOUND'].includes(workflowStatus)}
-                  required 
-                />
+            {/* Visual Tracker Card */}
+            <div className="glass-card">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+                <h2 className="card-title" style={{ margin: 0, borderBottom: 'none', paddingBottom: 0 }}>
+                  <span style={{ fontSize: '1.5rem' }}>📊</span> Booking Orchestration Pipeline
+                </h2>
+                {isBookingActive && (
+                  <div style={{
+                    fontSize: '0.8rem', fontWeight: 700, padding: '4px 10px', borderRadius: '6px',
+                    backgroundColor: ['CONFIRMED'].includes(workflowStatus) ? 'rgba(16, 185, 129, 0.15)' : 
+                                     ['CANCELLED', 'FAILED'].includes(workflowStatus) ? 'rgba(239, 68, 68, 0.15)' : 'rgba(168, 85, 247, 0.15)',
+                    color: ['CONFIRMED'].includes(workflowStatus) ? 'var(--success)' : 
+                           ['CANCELLED', 'FAILED'].includes(workflowStatus) ? 'var(--danger)' : 'var(--primary)',
+                    border: '1px solid rgba(255,255,255,0.05)'
+                  }}>
+                    Status: {workflowStatus}
+                  </div>
+                )}
               </div>
 
-              <div className="form-group">
-                <label className="form-label">Destination</label>
-                <select 
-                  className="form-input" 
-                  value={destination}
-                  onChange={(e) => setDestination(e.target.value)}
-                  disabled={isBookingActive && !['CONFIRMED', 'CANCELLED', 'FAILED', 'NOT_FOUND'].includes(workflowStatus)}
-                >
-                  <option value="Tokyo, Japan">Tokyo, Japan (HND)</option>
-                  <option value="Paris, France">Paris, France (CDG)</option>
-                  <option value="London, United Kingdom">London, UK (LHR)</option>
-                  <option value="Bali, Indonesia">Bali, Indonesia (DPS)</option>
-                  <option value="New York, USA">New York, USA (JFK)</option>
-                </select>
+              <div className="pipeline-container">
+                
+                {/* Step 1: Flight */}
+                <div className={`pipeline-step ${getStepClass('flight')} ${['HOTEL_BOOKING_IN_PROGRESS', 'TRANSPORT_ARRANGING_IN_PROGRESS', 'PENDING_USER_CONFIRMATION', 'CONFIRMED'].includes(workflowStatus) ? 'completed' : ''} ${workflowStatus === 'COMPENSATING' || workflowStatus === 'CANCELLED' ? 'compensated' : ''}`}>
+                  <div className="step-circle">✈️</div>
+                  <div className="step-content">
+                    <div className="step-header">
+                      <h4 className="step-title">Book Flight</h4>
+                      <span className={`step-status ${getStepClass('flight')}`}>{getStepClass('flight')}</span>
+                    </div>
+                    <p className="step-desc">Reserves airline seat to destination. Comp: `cancelFlight`</p>
+                  </div>
+                </div>
+
+                {/* Step 2: Hotel */}
+                <div className={`pipeline-step ${getStepClass('hotel')} ${['TRANSPORT_ARRANGING_IN_PROGRESS', 'PENDING_USER_CONFIRMATION', 'CONFIRMED'].includes(workflowStatus) ? 'completed' : ''} ${workflowStatus === 'COMPENSATING' || workflowStatus === 'CANCELLED' ? 'compensated' : ''}`}>
+                  <div className="step-circle">🏨</div>
+                  <div className="step-content">
+                    <div className="step-header">
+                      <h4 className="step-title">Book Hotel</h4>
+                      <span className={`step-status ${getStepClass('hotel')}`}>{getStepClass('hotel')}</span>
+                    </div>
+                    <p className="step-desc">Books double-room room for target dates. Comp: `cancelHotel`</p>
+                  </div>
+                </div>
+
+                {/* Step 3: Local Transport */}
+                <div className={`pipeline-step ${getStepClass('transport')} ${['PENDING_USER_CONFIRMATION', 'CONFIRMED'].includes(workflowStatus) ? 'completed' : ''} ${workflowStatus === 'COMPENSATING' || workflowStatus === 'CANCELLED' ? 'compensated' : ''}`}>
+                  <div className="step-circle">🚗</div>
+                  <div className="step-content">
+                    <div className="step-header">
+                      <h4 className="step-title">Arrange Local Transport</h4>
+                      <span className={`step-status ${getStepClass('transport')}`}>{getStepClass('transport')}</span>
+                    </div>
+                    <p className="step-desc">Dispatches executive airport transfer. Comp: `cancelTransport`</p>
+                  </div>
+                </div>
+
+                {/* Step 4: User Confirmation Signal */}
+                <div className={`pipeline-step ${getStepClass('confirm')}`}>
+                  <div className="step-circle">⏳</div>
+                  <div className="step-content">
+                    <div className="step-header">
+                      <h4 className="step-title">User Approval Checkpoint</h4>
+                      <span className={`step-status ${getStepClass('confirm')}`}>{getStepClass('confirm')}</span>
+                    </div>
+                    <p className="step-desc">Awaits manual confirmation. Initiates compensation if timeout occurs.</p>
+                  </div>
+                </div>
+
+                {/* Step 5: Finalized */}
+                <div className={`pipeline-step ${getStepClass('finalize')}`}>
+                  <div className="step-circle">🎉</div>
+                  <div className="step-content">
+                    <div className="step-header">
+                      <h4 className="step-title">Finalize Travel Booking</h4>
+                      <span className={`step-status ${getStepClass('finalize')}`}>{getStepClass('finalize')}</span>
+                    </div>
+                    <p className="step-desc">Commits booking ledger. Completes workflow successfully.</p>
+                  </div>
+                </div>
+
               </div>
 
-              <div className="form-group">
-                <label className="form-label">Travel Date</label>
-                <input 
-                  type="date" 
-                  className="form-input" 
-                  value={travelDate}
-                  onChange={(e) => setTravelDate(e.target.value)}
-                  disabled={isBookingActive && !['CONFIRMED', 'CANCELLED', 'FAILED', 'NOT_FOUND'].includes(workflowStatus)}
-                  required
-                />
-              </div>
-
-              <button 
-                type="submit" 
-                className="btn-primary"
-                disabled={isBookingActive && !['CONFIRMED', 'CANCELLED', 'FAILED', 'NOT_FOUND'].includes(workflowStatus)}
-              >
-                <span>🚀</span> Start Booking Process
-              </button>
-            </form>
-
-            {isBookingActive && ['CONFIRMED', 'CANCELLED', 'FAILED', 'NOT_FOUND'].includes(workflowStatus) && (
-              <button 
-                className="btn-primary" 
-                onClick={() => {
-                  setIsBookingActive(false)
-                  setWorkflowStatus('PENDING_START')
-                  addLog('Dashboard reset. Ready for next request.', 'info')
-                }}
-                style={{ marginTop: '16px', background: 'var(--slate-800)', boxShadow: 'none', border: '1px solid var(--slate-700)' }}
-              >
-                🔄 Reset Dashboard
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Right Column: Visual Pipeline Tracker & Real-Time Console */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '30px' }}>
-          
-          {/* Visual Tracker Card */}
-          <div className="glass-card">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-              <h2 className="card-title" style={{ margin: 0, borderBottom: 'none', paddingBottom: 0 }}>
-                <span style={{ fontSize: '1.5rem' }}>📊</span> Booking Orchestration Pipeline
-              </h2>
-              {isBookingActive && (
-                <div style={{
-                  fontSize: '0.8rem', fontWeight: 700, padding: '4px 10px', borderRadius: '6px',
-                  backgroundColor: ['CONFIRMED'].includes(workflowStatus) ? 'rgba(16, 185, 129, 0.15)' : 
-                                   ['CANCELLED', 'FAILED'].includes(workflowStatus) ? 'rgba(239, 68, 68, 0.15)' : 'rgba(168, 85, 247, 0.15)',
-                  color: ['CONFIRMED'].includes(workflowStatus) ? 'var(--success)' : 
-                         ['CANCELLED', 'FAILED'].includes(workflowStatus) ? 'var(--danger)' : 'var(--primary)',
-                  border: '1px solid rgba(255,255,255,0.05)'
-                }}>
-                  Status: {workflowStatus}
+              {/* Countdown and Confirmation Area */}
+              {isBookingActive && workflowStatus === 'PENDING_USER_CONFIRMATION' && (
+                <div className="confirmation-box">
+                  <div className="confirmation-header">
+                    <div className="confirmation-title">
+                      <span>⚠️</span> Approval Required
+                    </div>
+                    <div className="countdown-badge">
+                      <span>⏰</span> {countdown}s remaining
+                    </div>
+                  </div>
+                  <p style={{ margin: '0 0 16px 0', fontSize: '0.9rem', color: 'var(--slate-400)' }}>
+                    The booking resources are provisionally reserved. Click the button below to issue a Temporal signal to confirm. If the timer runs out, the transaction will automatically run compensation activities.
+                  </p>
+                  <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
+                    <button className="btn-confirm" onClick={handleConfirmBooking} style={{ flex: 1 }}>
+                      ✅ Confirm Booking
+                    </button>
+                    <button className="btn-confirm" onClick={handleCancelBooking} style={{ flex: 1, backgroundColor: 'var(--danger)', backgroundImage: 'none', boxShadow: 'none' }}>
+                      ❌ Cancel Booking
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
 
-            <div className="pipeline-container">
+            {/* Console / Terminal Terminal Card */}
+            <div className="console-card">
+              <div className="console-header">
+                <div className="console-title">
+                  <span className={`console-dot ${isBookingActive && !['CONFIRMED', 'CANCELLED', 'FAILED', 'NOT_FOUND'].includes(workflowStatus) ? 'pulsing' : ''}`}></span>
+                  <span>Temporal Worker Logs Console</span>
+                </div>
+                <span style={{ fontSize: '0.75rem', fontFamily: 'var(--font-mono)', color: 'var(--slate-700)' }}>PORT: 7233</span>
+              </div>
               
-              {/* Step 1: Flight */}
-              <div className={`pipeline-step ${getStepClass('flight')} ${['HOTEL_BOOKING_IN_PROGRESS', 'TRANSPORT_ARRANGING_IN_PROGRESS', 'PENDING_USER_CONFIRMATION', 'CONFIRMED'].includes(workflowStatus) ? 'completed' : ''} ${workflowStatus === 'COMPENSATING' || workflowStatus === 'CANCELLED' ? 'compensated' : ''}`}>
-                <div className="step-circle">✈️</div>
-                <div className="step-content">
-                  <div className="step-header">
-                    <h4 className="step-title">Book Flight</h4>
-                    <span className={`step-status ${getStepClass('flight')}`}>{getStepClass('flight')}</span>
+              <div className="console-logs">
+                {logs.map((log, idx) => (
+                  <div key={idx} className="log-entry">
+                    <span className="log-time">[{log.time}]</span>
+                    <span className={`log-msg ${log.type}`}>{log.msg}</span>
                   </div>
-                  <p className="step-desc">Reserves airline seat to destination. Comp: `cancelFlight`</p>
-                </div>
+                ))}
+                <div ref={consoleEndRef} />
               </div>
-
-              {/* Step 2: Hotel */}
-              <div className={`pipeline-step ${getStepClass('hotel')} ${['TRANSPORT_ARRANGING_IN_PROGRESS', 'PENDING_USER_CONFIRMATION', 'CONFIRMED'].includes(workflowStatus) ? 'completed' : ''} ${workflowStatus === 'COMPENSATING' || workflowStatus === 'CANCELLED' ? 'compensated' : ''}`}>
-                <div className="step-circle">🏨</div>
-                <div className="step-content">
-                  <div className="step-header">
-                    <h4 className="step-title">Book Hotel</h4>
-                    <span className={`step-status ${getStepClass('hotel')}`}>{getStepClass('hotel')}</span>
-                  </div>
-                  <p className="step-desc">Books double-room room for target dates. Comp: `cancelHotel`</p>
-                </div>
-              </div>
-
-              {/* Step 3: Local Transport */}
-              <div className={`pipeline-step ${getStepClass('transport')} ${['PENDING_USER_CONFIRMATION', 'CONFIRMED'].includes(workflowStatus) ? 'completed' : ''} ${workflowStatus === 'COMPENSATING' || workflowStatus === 'CANCELLED' ? 'compensated' : ''}`}>
-                <div className="step-circle">🚗</div>
-                <div className="step-content">
-                  <div className="step-header">
-                    <h4 className="step-title">Arrange Local Transport</h4>
-                    <span className={`step-status ${getStepClass('transport')}`}>{getStepClass('transport')}</span>
-                  </div>
-                  <p className="step-desc">Dispatches executive airport transfer. Comp: `cancelTransport`</p>
-                </div>
-              </div>
-
-              {/* Step 4: User Confirmation Signal */}
-              <div className={`pipeline-step ${getStepClass('confirm')}`}>
-                <div className="step-circle">⏳</div>
-                <div className="step-content">
-                  <div className="step-header">
-                    <h4 className="step-title">User Approval Checkpoint</h4>
-                    <span className={`step-status ${getStepClass('confirm')}`}>{getStepClass('confirm')}</span>
-                  </div>
-                  <p className="step-desc">Awaits manual confirmation. Initiates compensation if timeout occurs.</p>
-                </div>
-              </div>
-
-              {/* Step 5: Finalized */}
-              <div className={`pipeline-step ${getStepClass('finalize')}`}>
-                <div className="step-circle">🎉</div>
-                <div className="step-content">
-                  <div className="step-header">
-                    <h4 className="step-title">Finalize Travel Booking</h4>
-                    <span className={`step-status ${getStepClass('finalize')}`}>{getStepClass('finalize')}</span>
-                  </div>
-                  <p className="step-desc">Commits booking ledger. Completes workflow successfully.</p>
-                </div>
-              </div>
-
             </div>
 
-            {/* Countdown and Confirmation Area */}
-            {isBookingActive && workflowStatus === 'PENDING_USER_CONFIRMATION' && (
-              <div className="confirmation-box">
-                <div className="confirmation-header">
-                  <div className="confirmation-title">
-                    <span>⚠️</span> Approval Required
-                  </div>
-                  <div className="countdown-badge">
-                    <span>⏰</span> {countdown}s remaining
-                  </div>
-                </div>
-                <p style={{ margin: '0 0 16px 0', fontSize: '0.9rem', color: 'var(--slate-400)' }}>
-                  The booking resources are provisionally reserved. Click the button below to issue a Temporal signal to confirm. If the timer runs out, the transaction will automatically run compensation activities.
-                </p>
-                <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
-                  <button className="btn-confirm" onClick={handleConfirmBooking} style={{ flex: 1 }}>
-                    ✅ Confirm Booking
-                  </button>
-                  <button className="btn-confirm" onClick={handleCancelBooking} style={{ flex: 1, backgroundColor: 'var(--danger)', backgroundImage: 'none', boxShadow: 'none' }}>
-                    ❌ Cancel Booking
-                  </button>
-                </div>
-              </div>
-            )}
           </div>
-
-          {/* Console / Terminal Terminal Card */}
-          <div className="console-card">
-            <div className="console-header">
-              <div className="console-title">
-                <span className={`console-dot ${isBookingActive && !['CONFIRMED', 'CANCELLED', 'FAILED', 'NOT_FOUND'].includes(workflowStatus) ? 'pulsing' : ''}`}></span>
-                <span>Temporal Worker Logs Console</span>
-              </div>
-              <span style={{ fontSize: '0.75rem', fontFamily: 'var(--font-mono)', color: 'var(--slate-700)' }}>PORT: 7233</span>
-            </div>
-            
-            <div className="console-logs">
-              {logs.map((log, idx) => (
-                <div key={idx} className="log-entry">
-                  <span className="log-time">[{log.time}]</span>
-                  <span className={`log-msg ${log.type}`}>{log.msg}</span>
-                </div>
-              ))}
-              <div ref={consoleEndRef} />
-            </div>
-          </div>
-
         </div>
+      )}
 
-      </div>
+      {/* Tab 2: Temporal Auditing */}
+      {activeTab === 'auditing' && (
+        <div className="tab-content iframe-container">
+          <div className="iframe-header">
+            <div>
+              <h2 className="iframe-title">🕵️ Temporal UI Auditing</h2>
+              <p style={{ margin: '4px 0 0 0', fontSize: '0.85rem', color: 'var(--slate-400)' }}>
+                Track and inspect workflow executions, history logs, and activity payloads in real-time.
+              </p>
+            </div>
+            <a href="http://localhost:8088/namespaces/default/workflows" target="_blank" rel="noopener noreferrer" className="btn-primary" style={{ width: 'auto', padding: '10px 16px', fontSize: '0.85rem' }}>
+              <span>↗️</span> Open in New Tab
+            </a>
+          </div>
+          <iframe 
+            src="http://localhost:8088/namespaces/default/workflows" 
+            title="Temporal Web UI"
+            className="embedded-iframe"
+          />
+        </div>
+      )}
+
+      {/* Tab 3: API Swagger Documentation */}
+      {activeTab === 'swagger' && (
+        <div className="tab-content iframe-container">
+          <div className="iframe-header">
+            <div>
+              <h2 className="iframe-title">📖 API Swagger UI</h2>
+              <p style={{ margin: '4px 0 0 0', fontSize: '0.85rem', color: 'var(--slate-400)' }}>
+                Explore, inspect, and trigger Spring Boot REST endpoints directly using the OpenAPI specification.
+              </p>
+            </div>
+            <a href="http://localhost:9191/swagger-ui/index.html" target="_blank" rel="noopener noreferrer" className="btn-primary" style={{ width: 'auto', padding: '10px 16px', fontSize: '0.85rem' }}>
+              <span>↗️</span> Open in New Tab
+            </a>
+          </div>
+          <iframe 
+            src="http://localhost:9191/swagger-ui/index.html" 
+            title="Swagger API UI"
+            className="embedded-iframe"
+          />
+        </div>
+      )}
     </div>
   )
 }
