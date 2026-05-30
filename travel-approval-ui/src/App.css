@@ -880,3 +880,30 @@ body {
   font-weight: 600;
   color: var(--slate-50);
 }
+
+/* Side-by-side pipeline and controls layout */
+.pipeline-layout {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 30px;
+  align-items: start;
+  margin-top: 20px;
+}
+
+@media (min-width: 768px) {
+  .pipeline-layout.active-booking {
+    grid-template-columns: 1.2fr 1fr;
+  }
+}
+
+.pipeline-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  animation: fadeIn 0.4s ease-out;
+}
+
+.pipeline-controls .confirmation-box {
+  margin-top: 0;
+}
+

@@ -459,10 +459,10 @@ function App() {
 
     if (stepName === 'confirm') {
       if (workflowStatus === 'PENDING_USER_CONFIRMATION') {
-        return { className: 'active', label: 'AWAITING ACCEPTANCE' }
+        return { className: 'active', label: 'AWAITING CONFIRMATION' }
       }
       if (['PAYMENT_IN_PROGRESS', 'BILLING_CHARGED', 'BILLING_INVOICED', 'BILLING_COMPLETED', 'CONFIRMED'].includes(workflowStatus)) {
-        return { className: 'completed', label: 'ACCEPTED' }
+        return { className: 'completed', label: 'CONFIRMED' }
       }
       if (workflowStatus === 'CANCELLED') {
         if (simulateFlightFailure || simulateHotelFailure || simulateTransportFailure) {
@@ -940,159 +940,166 @@ function App() {
                 </div>
               )}
 
-              <div className="pipeline-container">
-                
-                {/* Step 1: Flight */}
-                {(() => {
-                  const details = getStepDetails('flight');
-                  return (
-                    <div className={`pipeline-step ${details.className}`}>
-                      <div className="step-circle">✈️</div>
-                      <div className="step-content">
-                        <div className="step-header">
-                          <h4 className="step-title">Book Flight</h4>
-                          <span className={`step-status ${details.className}`}>{details.label}</span>
+              <div className={isBookingActive ? "pipeline-layout active-booking" : "pipeline-layout"}>
+                <div className="pipeline-container" style={{ paddingLeft: '0px' }}>
+                  
+                  {/* Step 1: Flight */}
+                  {(() => {
+                    const details = getStepDetails('flight');
+                    return (
+                      <div className={`pipeline-step ${details.className}`}>
+                        <div className="step-circle">✈️</div>
+                        <div className="step-content">
+                          <div className="step-header">
+                            <h4 className="step-title">Book Flight</h4>
+                            <span className={`step-status ${details.className}`}>{details.label}</span>
+                          </div>
+                          <p className="step-desc">Reserves airline seat to destination. Comp: `cancelFlight`</p>
                         </div>
-                        <p className="step-desc">Reserves airline seat to destination. Comp: `cancelFlight`</p>
                       </div>
-                    </div>
-                  );
-                })()}
+                    );
+                  })()}
 
-                {/* Step 2: Hotel */}
-                {(() => {
-                  const details = getStepDetails('hotel');
-                  return (
-                    <div className={`pipeline-step ${details.className}`}>
-                      <div className="step-circle">🏨</div>
-                      <div className="step-content">
-                        <div className="step-header">
-                          <h4 className="step-title">Book Hotel</h4>
-                          <span className={`step-status ${details.className}`}>{details.label}</span>
+                  {/* Step 2: Hotel */}
+                  {(() => {
+                    const details = getStepDetails('hotel');
+                    return (
+                      <div className={`pipeline-step ${details.className}`}>
+                        <div className="step-circle">🏨</div>
+                        <div className="step-content">
+                          <div className="step-header">
+                            <h4 className="step-title">Book Hotel</h4>
+                            <span className={`step-status ${details.className}`}>{details.label}</span>
+                          </div>
+                          <p className="step-desc">Books double-room room for target dates. Comp: `cancelHotel`</p>
                         </div>
-                        <p className="step-desc">Books double-room room for target dates. Comp: `cancelHotel`</p>
                       </div>
-                    </div>
-                  );
-                })()}
+                    );
+                  })()}
 
-                {/* Step 3: Local Transport */}
-                {(() => {
-                  const details = getStepDetails('transport');
-                  return (
-                    <div className={`pipeline-step ${details.className}`}>
-                      <div className="step-circle">🚗</div>
-                      <div className="step-content">
-                        <div className="step-header">
-                          <h4 className="step-title">Arrange Local Transport</h4>
-                          <span className={`step-status ${details.className}`}>{details.label}</span>
+                  {/* Step 3: Local Transport */}
+                  {(() => {
+                    const details = getStepDetails('transport');
+                    return (
+                      <div className={`pipeline-step ${details.className}`}>
+                        <div className="step-circle">🚗</div>
+                        <div className="step-content">
+                          <div className="step-header">
+                            <h4 className="step-title">Arrange Local Transport</h4>
+                            <span className={`step-status ${details.className}`}>{details.label}</span>
+                          </div>
+                          <p className="step-desc">Dispatches executive airport transfer. Comp: `cancelTransport`</p>
                         </div>
-                        <p className="step-desc">Dispatches executive airport transfer. Comp: `cancelTransport`</p>
                       </div>
-                    </div>
-                  );
-                })()}
+                    );
+                  })()}
 
-                {/* Step 4: User Confirmation Signal */}
-                {(() => {
-                  const details = getStepDetails('confirm');
-                  return (
-                    <div className={`pipeline-step ${details.className}`}>
-                      <div className="step-circle">⏳</div>
-                      <div className="step-content">
-                        <div className="step-header">
-                          <h4 className="step-title">Trip Acceptance Checkpoint</h4>
-                          <span className={`step-status ${details.className}`}>{details.label}</span>
+                  {/* Step 4: User Confirmation Signal */}
+                  {(() => {
+                    const details = getStepDetails('confirm');
+                    return (
+                      <div className={`pipeline-step ${details.className}`}>
+                        <div className="step-circle">⏳</div>
+                        <div className="step-content">
+                          <div className="step-header">
+                            <h4 className="step-title">Awaiting for TripConfirmation</h4>
+                            <span className={`step-status ${details.className}`}>{details.label}</span>
+                          </div>
+                          <p className="step-desc">Awaits manual trip confirmation. Initiates compensation if timeout occurs.</p>
                         </div>
-                        <p className="step-desc">Awaits manual trip acceptance. Initiates compensation if timeout occurs.</p>
                       </div>
-                    </div>
-                  );
-                })()}
+                    );
+                  })()}
 
-                {/* Step 5: Child Billing & Payments */}
-                {(() => {
-                  const details = getStepDetails('payment');
-                  return (
-                    <div className={`pipeline-step ${details.className}`}>
-                      <div className="step-circle">💳</div>
-                      <div className="step-content">
-                        <div className="step-header">
-                          <h4 className="step-title">Child Payment Workflow</h4>
-                          <span className={`step-status ${details.className}`}>{details.label}</span>
+                  {/* Step 5: Child Billing & Payments */}
+                  {(() => {
+                    const details = getStepDetails('payment');
+                    return (
+                      <div className={`pipeline-step ${details.className}`}>
+                        <div className="step-circle">💳</div>
+                        <div className="step-content">
+                          <div className="step-header">
+                            <h4 className="step-title">Child Payment Workflow</h4>
+                            <span className={`step-status ${details.className}`}>{details.label}</span>
+                          </div>
+                          <p className="step-desc">Orchestrates card charge, invoicing, and loyalty points. Comp: `refundPayment`</p>
                         </div>
-                        <p className="step-desc">Orchestrates card charge, invoicing, and loyalty points. Comp: `refundPayment`</p>
                       </div>
-                    </div>
-                  );
-                })()}
+                    );
+                  })()}
 
-                {/* Step 6: Finalized */}
-                {(() => {
-                  const details = getStepDetails('finalize');
-                  return (
-                    <div className={`pipeline-step ${details.className}`}>
-                      <div className="step-circle">🎉</div>
-                      <div className="step-content">
-                        <div className="step-header">
-                          <h4 className="step-title">Finalize Travel Booking</h4>
-                          <span className={`step-status ${details.className}`}>{details.label}</span>
+                  {/* Step 6: Finalized */}
+                  {(() => {
+                    const details = getStepDetails('finalize');
+                    return (
+                      <div className={`pipeline-step ${details.className}`}>
+                        <div className="step-circle">🎉</div>
+                        <div className="step-content">
+                          <div className="step-header">
+                            <h4 className="step-title">Finalize Travel Booking</h4>
+                            <span className={`step-status ${details.className}`}>{details.label}</span>
+                          </div>
+                          <p className="step-desc">Commits booking ledger. Completes workflow successfully.</p>
                         </div>
-                        <p className="step-desc">Commits booking ledger. Completes workflow successfully.</p>
                       </div>
-                    </div>
-                  );
-                })()}
+                    );
+                  })()}
 
-              </div>
-
-              {/* Countdown and Confirmation Area */}
-              {isBookingActive && workflowStatus === 'PENDING_USER_CONFIRMATION' && (
-                <div className="confirmation-box">
-                  <div className="confirmation-header">
-                    <div className="confirmation-title">
-                      <span>⚠️</span> Acceptance Required
-                    </div>
-                    <div className="countdown-badge">
-                      <span>⏰</span> {countdown}s remaining
-                    </div>
-                  </div>
-                  <p style={{ margin: '0 0 16px 0', fontSize: '0.9rem', color: 'var(--slate-400)' }}>
-                    The booking resources are provisionally reserved. Click the button below to issue a Temporal signal to confirm. If the timer runs out, the transaction will automatically run compensation activities.
-                  </p>
-                  <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
-                    <button className="btn-confirm" onClick={handleConfirmBooking} style={{ flex: 1 }}>
-                      ✅ Confirm Booking
-                    </button>
-                    <button className="btn-confirm" onClick={handleCancelBooking} style={{ flex: 1, backgroundColor: 'var(--danger)', backgroundImage: 'none', boxShadow: 'none' }}>
-                      ❌ Cancel Booking
-                    </button>
-                  </div>
                 </div>
-              )}
-              {isBookingActive && !isOfflineSimulation && !['CONFIRMED', 'CANCELLED', 'FAILED', 'NOT_FOUND'].includes(workflowStatus) && (
-                <button 
-                  className="btn-kill"
-                  onClick={handleKillBackend}
-                  style={{
-                    marginTop: '20px',
-                    width: '100%',
-                    padding: '12px',
-                    borderRadius: '10px',
-                    border: '1px solid rgba(239, 68, 68, 0.3)',
-                    fontFamily: 'var(--font-heading)',
-                    fontWeight: 700,
-                    fontSize: '0.95rem',
-                    cursor: 'pointer',
-                    background: 'rgba(239, 68, 68, 0.1)',
-                    color: 'var(--danger)',
-                    boxShadow: 'none',
-                    transition: 'all 0.3s'
-                  }}
-                >
-                  💥 Kill Spring Boot Worker Instance
-                </button>
-              )}
+
+                {isBookingActive && (
+                  <div className="pipeline-controls">
+                    {/* Countdown and Confirmation Area */}
+                    {workflowStatus === 'PENDING_USER_CONFIRMATION' && (
+                      <div className="confirmation-box" style={{ marginTop: '0px' }}>
+                        <div className="confirmation-header">
+                          <div className="confirmation-title">
+                            <span>⚠️</span> Confirmation Required
+                          </div>
+                          <div className="countdown-badge">
+                            <span>⏰</span> {countdown}s remaining
+                          </div>
+                        </div>
+                        <p style={{ margin: '0 0 16px 0', fontSize: '0.9rem', color: 'var(--slate-400)' }}>
+                          The booking resources are provisionally reserved. Click the button below to issue a Temporal signal to confirm. If the timer runs out, the transaction will automatically run compensation activities.
+                        </p>
+                        <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
+                          <button className="btn-confirm" onClick={handleConfirmBooking} style={{ flex: 1 }}>
+                            ✅ Confirm Booking
+                          </button>
+                          <button className="btn-confirm" onClick={handleCancelBooking} style={{ flex: 1, backgroundColor: 'var(--danger)', backgroundImage: 'none', boxShadow: 'none' }}>
+                            ❌ Cancel Booking
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {!isOfflineSimulation && !['CONFIRMED', 'CANCELLED', 'FAILED', 'NOT_FOUND'].includes(workflowStatus) && (
+                      <button 
+                        className="btn-kill"
+                        onClick={handleKillBackend}
+                        style={{
+                          marginTop: workflowStatus === 'PENDING_USER_CONFIRMATION' ? '20px' : '0px',
+                          width: '100%',
+                          padding: '12px',
+                          borderRadius: '10px',
+                          border: '1px solid rgba(239, 68, 68, 0.3)',
+                          fontFamily: 'var(--font-heading)',
+                          fontWeight: 700,
+                          fontSize: '0.95rem',
+                          cursor: 'pointer',
+                          background: 'rgba(239, 68, 68, 0.1)',
+                          color: 'var(--danger)',
+                          boxShadow: 'none',
+                          transition: 'all 0.3s'
+                        }}
+                      >
+                        💥 Kill Spring Boot Worker Instance
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Console / Terminal Terminal Card */}
