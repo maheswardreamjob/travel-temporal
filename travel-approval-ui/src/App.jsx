@@ -44,7 +44,8 @@ function App() {
   const isBackendOfflineRef = useRef(false)
   
   // Countdown Timer State
-  const [countdown, setCountdown] = useState(120) // 2 minutes
+  const [configuredTimeout, setConfiguredTimeout] = useState(120) // Default 120 seconds
+  const [countdown, setCountdown] = useState(120)
   const timerRef = useRef(null)
 
   // Real-time Event Console Logs
@@ -72,8 +73,8 @@ function App() {
   // Countdown timer logic for PENDING_USER_CONFIRMATION
   useEffect(() => {
     if (workflowStatus === 'PENDING_USER_CONFIRMATION') {
-      // Start a 120s timer
-      setCountdown(isOfflineSimulation ? 15 : 120) // Fast 15s timer for offline simulation demo
+      // Start configured timer
+      setCountdown(isOfflineSimulation ? 15 : configuredTimeout)
       
       timerRef.current = setInterval(() => {
         setCountdown((prev) => {
@@ -82,6 +83,10 @@ function App() {
             if (isOfflineSimulation) {
               // Trigger compensation locally
               triggerOfflineCompensation()
+            } else {
+              // Automatically cancel booking when timer expires
+              addLog(`[CLIENT] Timer expired. Automatically triggering cancellation signal for user: ${userId}`, 'warn')
+              handleCancelBooking()
             }
             return 0
           }
@@ -95,7 +100,7 @@ function App() {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current)
     }
-  }, [workflowStatus])
+  }, [workflowStatus, configuredTimeout, isOfflineSimulation, userId])
 
   // Polls backend status
   const startStatusPolling = (uid) => {
@@ -592,10 +597,10 @@ function App() {
           <span>🎫</span> Application
         </button>
         <button 
-          className={`tab-btn ${activeTab === 'auditing' ? 'active' : ''}`}
-          onClick={() => setActiveTab('auditing')}
+          className={`tab-btn ${activeTab === 'admin' ? 'active' : ''}`}
+          onClick={() => setActiveTab('admin')}
         >
-          <span>🕵️</span> Auditing
+          <span>⚙️</span> Admin
         </button>
       </div>
 
@@ -1178,9 +1183,51 @@ function App() {
         </div>
       )}
 
-      {/* Tab 2: Auditing with Sub-Tabs */}
-      {activeTab === 'auditing' && (
+      {/* Tab 2: Admin Control Panel & Auditing iframe container */}
+      {activeTab === 'admin' && (
         <div className="tab-content iframe-container">
+          
+          {/* Configuration Card */}
+          <div className="glass-card" style={{ marginBottom: '30px', padding: '24px' }}>
+            <h2 className="card-title" style={{ fontSize: '1.2rem', marginBottom: '16px', borderBottom: 'none', paddingBottom: '0px' }}>
+              <span>⚙️</span> Workflow Control Panel
+            </h2>
+            <div style={{ display: 'flex', gap: '30px', alignItems: 'center', flexWrap: 'wrap' }}>
+              <div className="form-group" style={{ margin: 0, minWidth: '320px', flex: 1 }}>
+                <label className="form-label" style={{ marginBottom: '8px', fontSize: '0.8rem', color: 'var(--slate-400)' }}>
+                  ⏳ User Confirmation Timeout (seconds)
+                </label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                  <input 
+                    type="range" 
+                    min="10" 
+                    max="300" 
+                    step="10"
+                    value={configuredTimeout}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value);
+                      setConfiguredTimeout(val);
+                      addLog(`[ADMIN] Configured confirmation timeout changed to ${val} seconds.`, 'info');
+                    }}
+                    style={{ flex: 1, accentColor: 'var(--primary)', cursor: 'pointer' }}
+                  />
+                  <span style={{ 
+                    fontFamily: 'var(--font-mono)', 
+                    fontSize: '1.1rem', 
+                    fontWeight: 700, 
+                    color: 'var(--primary)',
+                    minWidth: '50px',
+                    textAlign: 'right'
+                  }}>
+                    {configuredTimeout}s
+                  </span>
+                </div>
+                <p style={{ margin: '8px 0 0 0', fontSize: '0.75rem', color: 'var(--slate-500)', lineHeight: '1.4' }}>
+                  Sets the duration of the countdown timer before the workflow initiates automatic Saga rollback.
+                </p>
+              </div>
+            </div>
+          </div>
           
           {/* Sub-tab Navigation */}
           <div className="sub-tab-navigation" style={{ display: 'flex', gap: '8px', marginBottom: '24px', borderBottom: '1px solid rgba(255, 255, 255, 0.06)', paddingBottom: '12px' }}>
