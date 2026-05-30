@@ -7,6 +7,8 @@ import io.temporal.activity.ActivityInterface;
 public interface TravelActivities {
 
 
+    public void initializeTripBooking(TravelRequest travelRequest);
+
     public void bookFlight(TravelRequest travelRequest);
 
     public void cancelFlight(TravelRequest travelRequest);

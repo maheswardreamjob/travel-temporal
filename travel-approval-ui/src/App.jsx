@@ -29,6 +29,8 @@ function App() {
   const [simulateFlightFailure, setSimulateFlightFailure] = useState(false)
   const [simulateHotelFailure, setSimulateHotelFailure] = useState(false)
   const [simulateTransportFailure, setSimulateTransportFailure] = useState(false)
+  const [simulatePaymentFailure, setSimulatePaymentFailure] = useState(false)
+  const [simulateLoyaltyFailure, setSimulateLoyaltyFailure] = useState(false)
 
   // UI / Workflow States
   const [isBookingActive, setIsBookingActive] = useState(false)
@@ -232,7 +234,9 @@ function App() {
             includeInsurance,
             simulateFlightFailure,
             simulateHotelFailure,
-            simulateTransportFailure
+            simulateTransportFailure,
+            simulatePaymentFailure,
+            simulateLoyaltyFailure
           })
         })
 
@@ -396,13 +400,13 @@ function App() {
     }
 
     if (stepName === 'flight') {
-      if (workflowStatus === 'FLIGHT_BOOKING_IN_PROGRESS') {
-        return { className: 'active', label: 'BOOKING...' }
+      if (workflowStatus === 'RESERVING_PARALLEL') {
+        return { className: 'active', label: 'RESERVING...' }
       }
       if (workflowStatus === 'COMPENSATING_FLIGHT') {
         return { className: 'compensating', label: 'COMPENSATING...' }
       }
-      if (['HOTEL_BOOKING_IN_PROGRESS', 'TRANSPORT_ARRANGING_IN_PROGRESS', 'PENDING_USER_CONFIRMATION', 'CONFIRMED', 'COMPENSATING_TRANSPORT', 'COMPENSATING_HOTEL'].includes(workflowStatus)) {
+      if (['PENDING_USER_CONFIRMATION', 'PAYMENT_IN_PROGRESS', 'BILLING_CHARGED', 'BILLING_INVOICED', 'BILLING_COMPLETED', 'CONFIRMED', 'COMPENSATING_TRANSPORT', 'COMPENSATING_HOTEL'].includes(workflowStatus)) {
         return { className: 'completed', label: 'COMPLETED' }
       }
       if (workflowStatus === 'CANCELLED') {
@@ -412,13 +416,13 @@ function App() {
     }
 
     if (stepName === 'hotel') {
-      if (workflowStatus === 'HOTEL_BOOKING_IN_PROGRESS') {
-        return { className: 'active', label: 'BOOKING...' }
+      if (workflowStatus === 'RESERVING_PARALLEL') {
+        return { className: 'active', label: 'RESERVING...' }
       }
       if (workflowStatus === 'COMPENSATING_HOTEL') {
         return { className: 'compensating', label: 'COMPENSATING...' }
       }
-      if (['TRANSPORT_ARRANGING_IN_PROGRESS', 'PENDING_USER_CONFIRMATION', 'CONFIRMED', 'COMPENSATING_TRANSPORT'].includes(workflowStatus)) {
+      if (['PENDING_USER_CONFIRMATION', 'PAYMENT_IN_PROGRESS', 'BILLING_CHARGED', 'BILLING_INVOICED', 'BILLING_COMPLETED', 'CONFIRMED', 'COMPENSATING_TRANSPORT'].includes(workflowStatus)) {
         return { className: 'completed', label: 'COMPLETED' }
       }
       if (workflowStatus === 'CANCELLED') {
@@ -433,13 +437,13 @@ function App() {
     }
 
     if (stepName === 'transport') {
-      if (workflowStatus === 'TRANSPORT_ARRANGING_IN_PROGRESS') {
-        return { className: 'active', label: 'ARRANGING...' }
+      if (workflowStatus === 'RESERVING_PARALLEL') {
+        return { className: 'active', label: 'RESERVING...' }
       }
       if (workflowStatus === 'COMPENSATING_TRANSPORT') {
         return { className: 'compensating', label: 'COMPENSATING...' }
       }
-      if (['PENDING_USER_CONFIRMATION', 'CONFIRMED'].includes(workflowStatus)) {
+      if (['PENDING_USER_CONFIRMATION', 'PAYMENT_IN_PROGRESS', 'BILLING_CHARGED', 'BILLING_INVOICED', 'BILLING_COMPLETED', 'CONFIRMED'].includes(workflowStatus)) {
         return { className: 'completed', label: 'COMPLETED' }
       }
       if (workflowStatus === 'CANCELLED') {
@@ -457,7 +461,7 @@ function App() {
       if (workflowStatus === 'PENDING_USER_CONFIRMATION') {
         return { className: 'active', label: 'AWAITING ACCEPTANCE' }
       }
-      if (workflowStatus === 'CONFIRMED') {
+      if (['PAYMENT_IN_PROGRESS', 'BILLING_CHARGED', 'BILLING_INVOICED', 'BILLING_COMPLETED', 'CONFIRMED'].includes(workflowStatus)) {
         return { className: 'completed', label: 'ACCEPTED' }
       }
       if (workflowStatus === 'CANCELLED') {
@@ -468,6 +472,30 @@ function App() {
       }
       if (['COMPENSATING_FLIGHT', 'COMPENSATING_HOTEL', 'COMPENSATING_TRANSPORT'].includes(workflowStatus)) {
         return { className: 'failed', label: 'CANCELLED' }
+      }
+      return { className: 'pending', label: 'PENDING' }
+    }
+
+    if (stepName === 'payment') {
+      if (workflowStatus === 'PAYMENT_IN_PROGRESS') {
+        return { className: 'active', label: 'PROCESSING...' }
+      }
+      if (workflowStatus === 'BILLING_CHARGED') {
+        return { className: 'active', label: 'CARD CHARGED' }
+      }
+      if (workflowStatus === 'BILLING_INVOICED') {
+        return { className: 'active', label: 'INVOICED' }
+      }
+      if (workflowStatus === 'BILLING_COMPLETED' || workflowStatus === 'CONFIRMED') {
+        return { className: 'completed', label: 'COMPLETED' }
+      }
+      if (workflowStatus === 'CANCELLED') {
+        if (simulatePaymentFailure) return { className: 'failed', label: 'FAILED (DECLINED)' }
+        if (simulateLoyaltyFailure) return { className: 'failed', label: 'FAILED (REFUNDED)' }
+        return { className: 'pending', label: 'SKIPPED' }
+      }
+      if (workflowStatus === 'COMPENSATING') {
+        return { className: 'compensating', label: 'REVERTING...' }
       }
       return { className: 'pending', label: 'PENDING' }
     }
@@ -753,12 +781,50 @@ function App() {
                           if (e.target.checked) {
                             setSimulateFlightFailure(false)
                             setSimulateHotelFailure(false)
+                            setSimulatePaymentFailure(false)
+                            setSimulateLoyaltyFailure(false)
                           }
                         }}
                         disabled={isBookingActive && !['CONFIRMED', 'CANCELLED', 'FAILED', 'NOT_FOUND'].includes(workflowStatus)}
                         style={{ width: '16px', height: '16px', accentColor: 'var(--danger)' }}
                       />
                       Simulate Transport API Failure
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.9rem', color: 'var(--slate-300)', cursor: 'pointer' }}>
+                      <input 
+                        type="checkbox" 
+                        checked={simulatePaymentFailure}
+                        onChange={(e) => {
+                          setSimulatePaymentFailure(e.target.checked)
+                          if (e.target.checked) {
+                            setSimulateFlightFailure(false)
+                            setSimulateHotelFailure(false)
+                            setSimulateTransportFailure(false)
+                            setSimulateLoyaltyFailure(false)
+                          }
+                        }}
+                        disabled={isBookingActive && !['CONFIRMED', 'CANCELLED', 'FAILED', 'NOT_FOUND'].includes(workflowStatus)}
+                        style={{ width: '16px', height: '16px', accentColor: 'var(--danger)' }}
+                      />
+                      Simulate Payment Failure
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.9rem', color: 'var(--slate-300)', cursor: 'pointer' }}>
+                      <input 
+                        type="checkbox" 
+                        checked={simulateLoyaltyFailure}
+                        onChange={(e) => {
+                          setSimulateLoyaltyFailure(e.target.checked)
+                          if (e.target.checked) {
+                            setSimulateFlightFailure(false)
+                            setSimulateHotelFailure(false)
+                            setSimulateTransportFailure(false)
+                            setSimulatePaymentFailure(false)
+                          }
+                        }}
+                        disabled={isBookingActive && !['CONFIRMED', 'CANCELLED', 'FAILED', 'NOT_FOUND'].includes(workflowStatus)}
+                        style={{ width: '16px', height: '16px', accentColor: 'var(--danger)' }}
+                      />
+                      Simulate Loyalty Failure
                     </label>
                   </div>
                 </div>
@@ -944,7 +1010,24 @@ function App() {
                   );
                 })()}
 
-                {/* Step 5: Finalized */}
+                {/* Step 5: Child Billing & Payments */}
+                {(() => {
+                  const details = getStepDetails('payment');
+                  return (
+                    <div className={`pipeline-step ${details.className}`}>
+                      <div className="step-circle">💳</div>
+                      <div className="step-content">
+                        <div className="step-header">
+                          <h4 className="step-title">Child Payment Workflow</h4>
+                          <span className={`step-status ${details.className}`}>{details.label}</span>
+                        </div>
+                        <p className="step-desc">Orchestrates card charge, invoicing, and loyalty points. Comp: `refundPayment`</p>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Step 6: Finalized */}
                 {(() => {
                   const details = getStepDetails('finalize');
                   return (

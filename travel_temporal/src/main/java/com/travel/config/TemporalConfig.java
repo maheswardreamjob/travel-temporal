@@ -1,6 +1,8 @@
 package com.travel.config;
 
+import com.travel.activities.PaymentActivities;
 import com.travel.activities.TravelActivities;
+import com.travel.workflow.PaymentWorkflowImpl;
 import com.travel.workflow.TravelWorkflowImpl;
 import io.temporal.client.WorkflowClient;
 import io.temporal.serviceclient.WorkflowServiceStubs;
@@ -18,6 +20,9 @@ public class TemporalConfig {
     private TravelActivities travelActivities;
 
     @Autowired
+    private PaymentActivities paymentActivities;
+
+    @Autowired
     private WorkerFactory workerFactory;
 
     /**
@@ -33,8 +38,8 @@ public class TemporalConfig {
         WorkerFactory factory = WorkerFactory.newInstance(client);
 
         Worker worker = factory.newWorker("TRAVEL_TASK_QUEUE");
-        worker.registerWorkflowImplementationTypes(TravelWorkflowImpl.class);
-        worker.registerActivitiesImplementations(travelActivities);
+        worker.registerWorkflowImplementationTypes(TravelWorkflowImpl.class, PaymentWorkflowImpl.class);
+        worker.registerActivitiesImplementations(travelActivities, paymentActivities);
 
         return factory;
     }

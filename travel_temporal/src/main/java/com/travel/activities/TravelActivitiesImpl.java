@@ -5,6 +5,9 @@ import com.travel.entity.FlightBooking;
 import com.travel.entity.HotelBooking;
 import com.travel.entity.TransportBooking;
 import com.travel.entity.TripBooking;
+import com.travel.repository.FlightBookingRepository;
+import com.travel.repository.HotelBookingRepository;
+import com.travel.repository.TransportBookingRepository;
 import com.travel.repository.TripBookingRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,6 +21,42 @@ public class TravelActivitiesImpl implements TravelActivities {
 
     @Autowired
     private TripBookingRepository tripBookingRepository;
+
+    @Autowired
+    private FlightBookingRepository flightBookingRepository;
+
+    @Autowired
+    private HotelBookingRepository hotelBookingRepository;
+
+    @Autowired
+    private TransportBookingRepository transportBookingRepository;
+
+    @Override
+    public void initializeTripBooking(TravelRequest travelRequest) {
+        String bookingId = "travel_" + travelRequest.getUserId();
+        log.info("📝 [ACTIVITY] Initializing parent travel booking: {}", bookingId);
+
+        // Delete any existing parent record and cascade-deletes of children to make it clean on retry
+        tripBookingRepository.findById(bookingId).ifPresent(trip -> {
+            tripBookingRepository.delete(trip);
+            tripBookingRepository.flush();
+        });
+
+        TripBooking tripBooking = TripBooking.builder()
+                .bookingId(bookingId)
+                .userId(travelRequest.getUserId())
+                .origin(travelRequest.getOrigin())
+                .destination(travelRequest.getDestination())
+                .departureDate(travelRequest.getDepartureDate())
+                .returnDate(travelRequest.getReturnDate())
+                .travelersCount(travelRequest.getTravelersCount())
+                .includeInsurance(travelRequest.isIncludeInsurance())
+                .status("PENDING")
+                .build();
+
+        tripBookingRepository.save(tripBooking);
+        log.info("✅ Parent travel booking successfully initialized: {}", bookingId);
+    }
 
     @Override
     public void bookFlight(TravelRequest travelRequest) {
@@ -39,21 +78,11 @@ public class TravelActivitiesImpl implements TravelActivities {
                 .status("BOOKED")
                 .build();
 
-        // 2. Create parent TripBooking entity (overwriting any previous run data)
-        TripBooking tripBooking = TripBooking.builder()
-                .bookingId(bookingId)
-                .userId(travelRequest.getUserId())
-                .origin(travelRequest.getOrigin())
-                .destination(travelRequest.getDestination())
-                .departureDate(travelRequest.getDepartureDate())
-                .returnDate(travelRequest.getReturnDate())
-                .travelersCount(travelRequest.getTravelersCount())
-                .includeInsurance(travelRequest.isIncludeInsurance())
-                .status("FLIGHT_BOOKED")
-                .flightBooking(flightBooking)
-                .build();
+        // Save child first
+        flightBookingRepository.save(flightBooking);
 
-        tripBookingRepository.save(tripBooking);
+        // 2. Atomically link to the parent TripBooking
+        tripBookingRepository.updateFlightBooking(bookingId, flightBooking);
 
         log.info("✈️ Flight booked successfully in DB (Table: flight_bookings, Code: {}): From {} to {} on {} for {} traveler(s) in {} class.",
                 flightCode,
@@ -69,7 +98,9 @@ public class TravelActivitiesImpl implements TravelActivities {
         String bookingId = "travel_" + travelRequest.getUserId();
         tripBookingRepository.findById(bookingId).ifPresent(trip -> {
             if (trip.getFlightBooking() != null) {
-                trip.getFlightBooking().setStatus("CANCELLED");
+                FlightBooking flight = trip.getFlightBooking();
+                flight.setStatus("CANCELLED");
+                flightBookingRepository.save(flight);
             }
             trip.setStatus("FLIGHT_CANCELLED");
             tripBookingRepository.save(trip);
@@ -90,9 +121,6 @@ public class TravelActivitiesImpl implements TravelActivities {
         }
 
         String bookingId = "travel_" + travelRequest.getUserId();
-        TripBooking trip = tripBookingRepository.findById(bookingId)
-                .orElseThrow(() -> new RuntimeException("Trip booking record not found for: " + bookingId));
-
         String hotelCode = "HOTEL-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
 
         // Create and populate HotelBooking entity
@@ -105,9 +133,11 @@ public class TravelActivitiesImpl implements TravelActivities {
                 .status("BOOKED")
                 .build();
 
-        trip.setHotelBooking(hotelBooking);
-        trip.setStatus("HOTEL_BOOKED");
-        tripBookingRepository.save(trip);
+        // Save child first
+        hotelBookingRepository.save(hotelBooking);
+
+        // Link atomically to parent TripBooking
+        tripBookingRepository.updateHotelBooking(bookingId, hotelBooking);
 
         log.info("🏨 Hotel booked successfully in DB (Table: hotel_bookings, Code: {}): {} at {} (Check-in: {}, Check-out: {}, Guests: {}).",
                 hotelCode,
@@ -123,7 +153,9 @@ public class TravelActivitiesImpl implements TravelActivities {
         String bookingId = "travel_" + travelRequest.getUserId();
         tripBookingRepository.findById(bookingId).ifPresent(trip -> {
             if (trip.getHotelBooking() != null) {
-                trip.getHotelBooking().setStatus("CANCELLED");
+                HotelBooking hotel = trip.getHotelBooking();
+                hotel.setStatus("CANCELLED");
+                hotelBookingRepository.save(hotel);
             }
             trip.setStatus("HOTEL_CANCELLED");
             tripBookingRepository.save(trip);
@@ -143,9 +175,6 @@ public class TravelActivitiesImpl implements TravelActivities {
         }
 
         String bookingId = "travel_" + travelRequest.getUserId();
-        TripBooking trip = tripBookingRepository.findById(bookingId)
-                .orElseThrow(() -> new RuntimeException("Trip booking record not found for: " + bookingId));
-
         String transCode = "TRANS-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
 
         // Create and populate TransportBooking entity
@@ -156,9 +185,11 @@ public class TravelActivitiesImpl implements TravelActivities {
                 .status("BOOKED")
                 .build();
 
-        trip.setTransportBooking(transportBooking);
-        trip.setStatus("TRANSPORT_ARRANGED");
-        tripBookingRepository.save(trip);
+        // Save child first
+        transportBookingRepository.save(transportBooking);
+
+        // Link atomically to parent TripBooking
+        tripBookingRepository.updateTransportBooking(bookingId, transportBooking);
 
         log.info("🚗 Executive transfer arranged successfully in DB (Table: transport_bookings, Code: {}): Chauffeur driven {} for {} traveler(s) at destination {}.",
                 transCode,
@@ -172,7 +203,9 @@ public class TravelActivitiesImpl implements TravelActivities {
         String bookingId = "travel_" + travelRequest.getUserId();
         tripBookingRepository.findById(bookingId).ifPresent(trip -> {
             if (trip.getTransportBooking() != null) {
-                trip.getTransportBooking().setStatus("CANCELLED");
+                TransportBooking transport = trip.getTransportBooking();
+                transport.setStatus("CANCELLED");
+                transportBookingRepository.save(transport);
             }
             trip.setStatus("TRANSPORT_CANCELLED");
             tripBookingRepository.save(trip);
