@@ -83,11 +83,11 @@ public class TravelWorkflowImpl implements TravelWorkflow {
             // Wait for user confirmation for up to 2 minutes. If no signal is
             // received within that window we trigger compensation to cancel
             // any booked resources.
-            log.info("⏳ Waiting for user confirmation for 1 minute...");
+            log.info("⏳ Waiting for user confirmation for 2 minutes...");
             this.status = "PENDING_USER_CONFIRMATION";
 
             boolean isConfirmed = Workflow.await(
-                    Duration.ofMinutes(1),
+                    Duration.ofMinutes(2),
                     () -> isUserConfirmed || isUserCancelled
             );
 
@@ -95,7 +95,7 @@ public class TravelWorkflowImpl implements TravelWorkflow {
                 if (isUserCancelled) {
                     log.info("User cancelled the booking, initiating compensation for user: {}", travelRequest.getUserId());
                 } else {
-                    log.info("User did not confirm within 1 minute, initiating compensation for user: {}", travelRequest.getUserId());
+                    log.info("User did not confirm within 2 minutes, initiating compensation for user: {}", travelRequest.getUserId());
                 }
                 this.status = "COMPENSATING";
                 // Run registered compensations (cancel flight/hotel/transport)

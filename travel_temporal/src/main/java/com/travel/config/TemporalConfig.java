@@ -1,18 +1,24 @@
 package com.travel.config;
 
-import com.travel.activities.TravelActivitiesImpl;
-import com.travel.workflow.TravelWorkflow;
+import com.travel.activities.TravelActivities;
 import com.travel.workflow.TravelWorkflowImpl;
 import io.temporal.client.WorkflowClient;
 import io.temporal.serviceclient.WorkflowServiceStubs;
 import io.temporal.worker.Worker;
 import io.temporal.worker.WorkerFactory;
 import jakarta.annotation.PostConstruct;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
 public class TemporalConfig {
+
+    @Autowired
+    private TravelActivities travelActivities;
+
+    @Autowired
+    private WorkerFactory workerFactory;
 
     /**
      * Creates and configures a WorkerFactory for Temporal workflows.
@@ -28,7 +34,7 @@ public class TemporalConfig {
 
         Worker worker = factory.newWorker("TRAVEL_TASK_QUEUE");
         worker.registerWorkflowImplementationTypes(TravelWorkflowImpl.class);
-        worker.registerActivitiesImplementations(new TravelActivitiesImpl());
+        worker.registerActivitiesImplementations(travelActivities);
 
         return factory;
     }
@@ -48,6 +54,6 @@ public class TemporalConfig {
      */
     @PostConstruct
     public void startWorker() {
-        workerFactory(serviceStubs()).start();
+        workerFactory.start();
     }
 }
