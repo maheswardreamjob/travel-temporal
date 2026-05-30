@@ -907,3 +907,68 @@ body {
   margin-top: 0;
 }
 
+/* Sub-step pills for nested parallel reservations and child workflows */
+.sub-steps-container {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+
+.sub-step-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 12px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  background: rgba(15, 23, 42, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  color: var(--slate-300);
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.sub-step-pill .sub-icon {
+  font-size: 0.85rem;
+}
+
+.sub-step-pill.active {
+  background: rgba(168, 85, 247, 0.1);
+  border-color: rgba(168, 85, 247, 0.3);
+  color: var(--primary);
+  box-shadow: 0 0 10px rgba(168, 85, 247, 0.15);
+}
+
+.sub-step-pill.completed {
+  background: rgba(16, 185, 129, 0.08);
+  border-color: rgba(16, 185, 129, 0.25);
+  color: var(--success);
+}
+
+.sub-step-pill.failed {
+  background: rgba(239, 68, 68, 0.08);
+  border-color: rgba(239, 68, 68, 0.25);
+  color: var(--danger);
+}
+
+.sub-step-pill.compensating {
+  background: rgba(245, 158, 11, 0.08);
+  border-color: rgba(245, 158, 11, 0.25);
+  color: var(--warning);
+}
+
+.sub-step-pill.compensated-done {
+  background: rgba(239, 68, 68, 0.04);
+  border-color: rgba(239, 68, 68, 0.15);
+  color: var(--slate-500);
+  text-decoration: line-through;
+}
+
+.sub-step-pill.pending {
+  background: rgba(255, 255, 255, 0.01);
+  border-color: rgba(255, 255, 255, 0.02);
+  color: var(--slate-600);
+}
+
+

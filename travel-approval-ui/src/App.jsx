@@ -399,6 +399,22 @@ function App() {
       return { className: 'pending', label: 'PENDING' }
     }
 
+    if (stepName === 'booking-reservations') {
+      if (['INITIALIZING_TRIP', 'RESERVING_PARALLEL'].includes(workflowStatus)) {
+        return { className: 'active', label: 'RESERVING...' }
+      }
+      if (['COMPENSATING', 'COMPENSATING_FLIGHT', 'COMPENSATING_HOTEL', 'COMPENSATING_TRANSPORT'].includes(workflowStatus)) {
+        return { className: 'compensating', label: 'COMPENSATING...' }
+      }
+      if (['PENDING_USER_CONFIRMATION', 'PAYMENT_IN_PROGRESS', 'BILLING_CHARGED', 'BILLING_INVOICED', 'BILLING_COMPLETED', 'CONFIRMED'].includes(workflowStatus)) {
+        return { className: 'completed', label: 'RESERVED' }
+      }
+      if (workflowStatus === 'CANCELLED') {
+        return { className: 'compensated-done', label: 'CANCELLED & COMPENSATED' }
+      }
+      return { className: 'pending', label: 'PENDING' }
+    }
+
     if (stepName === 'flight') {
       if (workflowStatus === 'RESERVING_PARALLEL') {
         return { className: 'active', label: 'RESERVING...' }
@@ -476,26 +492,63 @@ function App() {
       return { className: 'pending', label: 'PENDING' }
     }
 
-    if (stepName === 'payment') {
-      if (workflowStatus === 'PAYMENT_IN_PROGRESS') {
+    if (stepName === 'payment-workflow') {
+      if (['PAYMENT_IN_PROGRESS', 'BILLING_CHARGED', 'BILLING_INVOICED'].includes(workflowStatus)) {
         return { className: 'active', label: 'PROCESSING...' }
       }
-      if (workflowStatus === 'BILLING_CHARGED') {
-        return { className: 'active', label: 'CARD CHARGED' }
-      }
-      if (workflowStatus === 'BILLING_INVOICED') {
-        return { className: 'active', label: 'INVOICED' }
-      }
-      if (workflowStatus === 'BILLING_COMPLETED' || workflowStatus === 'CONFIRMED') {
+      if (['BILLING_COMPLETED', 'CONFIRMED'].includes(workflowStatus)) {
         return { className: 'completed', label: 'COMPLETED' }
       }
       if (workflowStatus === 'CANCELLED') {
-        if (simulatePaymentFailure) return { className: 'failed', label: 'FAILED (DECLINED)' }
-        if (simulateLoyaltyFailure) return { className: 'failed', label: 'FAILED (REFUNDED)' }
+        if (simulatePaymentFailure || simulateLoyaltyFailure) {
+          return { className: 'failed', label: 'FAILED & REVERTED' }
+        }
         return { className: 'pending', label: 'SKIPPED' }
       }
       if (workflowStatus === 'COMPENSATING') {
         return { className: 'compensating', label: 'REVERTING...' }
+      }
+      return { className: 'pending', label: 'PENDING' }
+    }
+
+    if (stepName === 'payment-charge') {
+      if (workflowStatus === 'PAYMENT_IN_PROGRESS') {
+        return { className: 'active', label: 'CHARGING...' }
+      }
+      if (['BILLING_CHARGED', 'BILLING_INVOICED', 'BILLING_COMPLETED', 'CONFIRMED'].includes(workflowStatus)) {
+        return { className: 'completed', label: 'CHARGED' }
+      }
+      if (workflowStatus === 'CANCELLED') {
+        if (simulatePaymentFailure) return { className: 'failed', label: 'DECLINED' }
+        if (simulateLoyaltyFailure) return { className: 'compensated-done', label: 'REFUNDED' }
+        return { className: 'pending', label: 'SKIPPED' }
+      }
+      return { className: 'pending', label: 'PENDING' }
+    }
+
+    if (stepName === 'payment-invoice') {
+      if (workflowStatus === 'BILLING_CHARGED') {
+        return { className: 'active', label: 'ISSUING...' }
+      }
+      if (['BILLING_INVOICED', 'BILLING_COMPLETED', 'CONFIRMED'].includes(workflowStatus)) {
+        return { className: 'completed', label: 'ISSUED' }
+      }
+      if (workflowStatus === 'CANCELLED') {
+        return { className: 'pending', label: 'SKIPPED' }
+      }
+      return { className: 'pending', label: 'PENDING' }
+    }
+
+    if (stepName === 'payment-loyalty') {
+      if (workflowStatus === 'BILLING_INVOICED') {
+        return { className: 'active', label: 'CREDITING...' }
+      }
+      if (['BILLING_COMPLETED', 'CONFIRMED'].includes(workflowStatus)) {
+        return { className: 'completed', label: 'CREDITED' }
+      }
+      if (workflowStatus === 'CANCELLED') {
+        if (simulateLoyaltyFailure) return { className: 'failed', label: 'FAILED' }
+        return { className: 'pending', label: 'SKIPPED' }
       }
       return { className: 'pending', label: 'PENDING' }
     }
@@ -943,58 +996,40 @@ function App() {
               <div className={isBookingActive ? "pipeline-layout active-booking" : "pipeline-layout"}>
                 <div className="pipeline-container" style={{ paddingLeft: '0px' }}>
                   
-                  {/* Step 1: Flight */}
+                  {/* Step 1: Booking Reservations (Parent Step with Parallel Children) */}
                   {(() => {
-                    const details = getStepDetails('flight');
+                    const parentDetails = getStepDetails('booking-reservations');
+                    const flightDetails = getStepDetails('flight');
+                    const hotelDetails = getStepDetails('hotel');
+                    const transportDetails = getStepDetails('transport');
+                    
                     return (
-                      <div className={`pipeline-step ${details.className}`}>
-                        <div className="step-circle">✈️</div>
+                      <div className={`pipeline-step ${parentDetails.className}`}>
+                        <div className="step-circle">🎫</div>
                         <div className="step-content">
                           <div className="step-header">
-                            <h4 className="step-title">Book Flight</h4>
-                            <span className={`step-status ${details.className}`}>{details.label}</span>
+                            <h4 className="step-title">Booking Reservations (Parallel Phase)</h4>
+                            <span className={`step-status ${parentDetails.className}`}>{parentDetails.label}</span>
                           </div>
-                          <p className="step-desc">Reserves airline seat to destination. Comp: `cancelFlight`</p>
+                          <p className="step-desc">Reserves flight, hotel, and local transport concurrently in parallel.</p>
+                          
+                          <div className="sub-steps-container">
+                            <div className={`sub-step-pill ${flightDetails.className}`}>
+                              <span className="sub-icon">✈️</span> Flight: {flightDetails.label}
+                            </div>
+                            <div className={`sub-step-pill ${hotelDetails.className}`}>
+                              <span className="sub-icon">🏨</span> Hotel: {hotelDetails.label}
+                            </div>
+                            <div className={`sub-step-pill ${transportDetails.className}`}>
+                              <span className="sub-icon">🚗</span> Transport: {transportDetails.label}
+                            </div>
+                          </div>
                         </div>
                       </div>
                     );
                   })()}
 
-                  {/* Step 2: Hotel */}
-                  {(() => {
-                    const details = getStepDetails('hotel');
-                    return (
-                      <div className={`pipeline-step ${details.className}`}>
-                        <div className="step-circle">🏨</div>
-                        <div className="step-content">
-                          <div className="step-header">
-                            <h4 className="step-title">Book Hotel</h4>
-                            <span className={`step-status ${details.className}`}>{details.label}</span>
-                          </div>
-                          <p className="step-desc">Books double-room room for target dates. Comp: `cancelHotel`</p>
-                        </div>
-                      </div>
-                    );
-                  })()}
-
-                  {/* Step 3: Local Transport */}
-                  {(() => {
-                    const details = getStepDetails('transport');
-                    return (
-                      <div className={`pipeline-step ${details.className}`}>
-                        <div className="step-circle">🚗</div>
-                        <div className="step-content">
-                          <div className="step-header">
-                            <h4 className="step-title">Arrange Local Transport</h4>
-                            <span className={`step-status ${details.className}`}>{details.label}</span>
-                          </div>
-                          <p className="step-desc">Dispatches executive airport transfer. Comp: `cancelTransport`</p>
-                        </div>
-                      </div>
-                    );
-                  })()}
-
-                  {/* Step 4: User Confirmation Signal */}
+                  {/* Step 2: User Confirmation Checkpoint */}
                   {(() => {
                     const details = getStepDetails('confirm');
                     return (
@@ -1011,24 +1046,40 @@ function App() {
                     );
                   })()}
 
-                  {/* Step 5: Child Billing & Payments */}
+                  {/* Step 3: Child Payment Workflow (Parent Step with Sequential Children) */}
                   {(() => {
-                    const details = getStepDetails('payment');
+                    const parentDetails = getStepDetails('payment-workflow');
+                    const chargeDetails = getStepDetails('payment-charge');
+                    const invoiceDetails = getStepDetails('payment-invoice');
+                    const loyaltyDetails = getStepDetails('payment-loyalty');
+                    
                     return (
-                      <div className={`pipeline-step ${details.className}`}>
+                      <div className={`pipeline-step ${parentDetails.className}`}>
                         <div className="step-circle">💳</div>
                         <div className="step-content">
                           <div className="step-header">
                             <h4 className="step-title">Child Payment Workflow</h4>
-                            <span className={`step-status ${details.className}`}>{details.label}</span>
+                            <span className={`step-status ${parentDetails.className}`}>{parentDetails.label}</span>
                           </div>
-                          <p className="step-desc">Orchestrates card charge, invoicing, and loyalty points. Comp: `refundPayment`</p>
+                          <p className="step-desc">Orchestrates card charge, invoicing, and loyalty points inside a sub-workflow.</p>
+                          
+                          <div className="sub-steps-container">
+                            <div className={`sub-step-pill ${chargeDetails.className}`}>
+                              <span className="sub-icon">💳</span> Card Charge: {chargeDetails.label}
+                            </div>
+                            <div className={`sub-step-pill ${invoiceDetails.className}`}>
+                              <span className="sub-icon">🧾</span> Invoice: {invoiceDetails.label}
+                            </div>
+                            <div className={`sub-step-pill ${loyaltyDetails.className}`}>
+                              <span className="sub-icon">🎁</span> Loyalty: {loyaltyDetails.label}
+                            </div>
+                          </div>
                         </div>
                       </div>
                     );
                   })()}
 
-                  {/* Step 6: Finalized */}
+                  {/* Step 4: Finalized */}
                   {(() => {
                     const details = getStepDetails('finalize');
                     return (
