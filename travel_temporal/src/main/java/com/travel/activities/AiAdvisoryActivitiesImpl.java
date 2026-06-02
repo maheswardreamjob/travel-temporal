@@ -58,14 +58,9 @@ public class AiAdvisoryActivitiesImpl implements AiAdvisoryActivities {
         try {
             log.info("🤖 [ACTIVITY] Calling Gemini API to evaluate travel risks for destination: {}", travelRequest.getDestination());
             
-            // Determine trip type
-            String tripType = "Solo Trip";
-            if (travelRequest.getTravelersCount() == 2) {
-                tripType = "Couple/Honeymoon Getaway";
-            } else if (travelRequest.getTravelersCount() >= 3) {
-                tripType = "Family/Group Vacation";
-            }
-            final String finalTripType = tripType;
+            // Use the trip type explicitly configured by the user in the UI
+            final String finalTripType = (travelRequest.getTripType() != null && !travelRequest.getTripType().isBlank())
+                ? travelRequest.getTripType() : "Solo Trip";
 
             // Run Weather and Visa Agents in parallel
             log.info("*** WEATHER AGENT *** Assessing weather risks and conditions for destination: {}", travelRequest.getDestination());
@@ -156,38 +151,44 @@ public class AiAdvisoryActivitiesImpl implements AiAdvisoryActivities {
         log.info("*** COORDINATOR AGENT (MOCK fallback) *** Generating offline advisor guidelines for destination: {}", travelRequest.getDestination());
         String dest = travelRequest.getDestination().toLowerCase();
         
-        String tripType = "Solo Trip";
-        if (travelRequest.getTravelersCount() == 2) {
-            tripType = "Couple/Honeymoon Getaway";
-        } else if (travelRequest.getTravelersCount() >= 3) {
-            tripType = "Family/Group Vacation";
-        }
+        // Use the explicitly chosen trip type from the UI
+        String tripType = (travelRequest.getTripType() != null && !travelRequest.getTripType().isBlank())
+            ? travelRequest.getTripType() : "Solo Trip";
+        boolean isFamily   = tripType.toLowerCase().contains("family") || tripType.toLowerCase().contains("group");
+        boolean isCouple   = tripType.toLowerCase().contains("couple") || tripType.toLowerCase().contains("honeymoon");
+        boolean isBusiness = tripType.toLowerCase().contains("business");
         
         StringBuilder mockAdvisory = new StringBuilder();
         
         if (dest.contains("tokyo") || dest.contains("japan")) {
             mockAdvisory.append("🌤️ Weather: Tokyo rating is 4/5 ★. Pleasant warm breeze is expected.\n");
             mockAdvisory.append("🛂 Visa Status: Not Required for short tourism visits (up to 90 days) with a valid passport.\n");
-            if (travelRequest.getTravelersCount() >= 3) {
-                mockAdvisory.append("💡 Expert Recommendation: Perfect for a family vacation! December is the best time for winter getaways in Japan, while April cherry blossom season is ideal for children sightseeing.");
-            } else if (travelRequest.getTravelersCount() == 2) {
-                mockAdvisory.append("💡 Expert Recommendation: Ideal Couple getaway! Autumn months of October/November offer romantic, temperate foliage scenery across gardens.");
+            if (isFamily) {
+                mockAdvisory.append("💡 Expert Recommendation: Perfect for a ").append(tripType).append("! December is the best time for winter getaways in Japan, while April cherry blossom season is ideal for children sightseeing.");
+            } else if (isCouple) {
+                mockAdvisory.append("💡 Expert Recommendation: Ideal ").append(tripType).append("! Autumn months of October/November offer romantic, temperate foliage scenery across gardens.");
+            } else if (isBusiness) {
+                mockAdvisory.append("💡 Expert Recommendation: Tokyo is excellent for a ").append(tripType).append(". The Marunouchi and Shinjuku districts host world-class conference venues with efficient rail connectivity.");
             } else {
-                mockAdvisory.append("💡 Expert Recommendation: Great Solo adventure! August features vibrant traditional summer festivals and local fireworks events.");
+                mockAdvisory.append("💡 Expert Recommendation: Great ").append(tripType).append("! August features vibrant traditional summer festivals and local fireworks events.");
             }
         } else if (dest.contains("bali") || dest.contains("indonesia")) {
             mockAdvisory.append("🌴 Weather: Bali rating is 3/5 ★. Occasional brief tropical rain showers.\n");
             mockAdvisory.append("🛂 Visa Status: Visa on Arrival required (30 days stay limit, fee applies).\n");
-            if (travelRequest.getTravelersCount() >= 3) {
-                mockAdvisory.append("💡 Expert Recommendation: Family tropical vacation. August is prime dry-season weather and optimal for booking nature resorts with waterfalls and water parks.");
+            if (isFamily) {
+                mockAdvisory.append("💡 Expert Recommendation: Bali ").append(tripType).append(". August is prime dry-season weather and optimal for booking nature resorts with waterfalls and water parks.");
+            } else if (isCouple) {
+                mockAdvisory.append("💡 Expert Recommendation: Romantic ").append(tripType).append(" to Bali! Private villas in Ubud and Seminyak offer stunning sunset views ideal for couples.");
             } else {
                 mockAdvisory.append("💡 Expert Recommendation: August is the dry season, making it perfect for outdoor snorkeling and volcanic hiking adventures.");
             }
         } else if (dest.contains("london") || dest.contains("united kingdom") || dest.contains("uk")) {
             mockAdvisory.append("☔ Weather: London rating is 3/5 ★. Cool temperatures with light scattered showers.\n");
             mockAdvisory.append("🛂 Visa Status: Not Required for short visits with at least 6 months passport validity.\n");
-            if (travelRequest.getTravelersCount() >= 3) {
-                mockAdvisory.append("💡 Expert Recommendation: London family trip. December is magical for winter wonderland markets and festive lights, whereas August offers mild garden weather.");
+            if (isFamily) {
+                mockAdvisory.append("💡 Expert Recommendation: London ").append(tripType).append(". December is magical for winter wonderland markets and festive lights, whereas August offers mild garden weather.");
+            } else if (isBusiness) {
+                mockAdvisory.append("💡 Expert Recommendation: London is a premier destination for a ").append(tripType).append(". The Canary Wharf and City of London are ideal for meetings.");
             } else {
                 mockAdvisory.append("💡 Expert Recommendation: Perfect city tour. August offers pleasant weather for walking tours along the Thames without extreme summer heat.");
             }
@@ -202,8 +203,10 @@ public class AiAdvisoryActivitiesImpl implements AiAdvisoryActivities {
         } else if (dest.contains("new york") || dest.contains("usa")) {
             mockAdvisory.append("🗽 Weather: New York rating is 4/5 ★. Warm and sunny city weather.\n");
             mockAdvisory.append("🛂 Visa Status: ESTA visa waiver required at least 72 hours prior to flight departure.\n");
-            if (travelRequest.getTravelersCount() >= 3) {
-                mockAdvisory.append("💡 Expert Recommendation: Great family vacation! If visiting water fountains or Central Park attractions, August is the optimal season. Alternatively, December offers festive skating rink setups.");
+            if (isFamily) {
+                mockAdvisory.append("💡 Expert Recommendation: Great ").append(tripType).append("! Visiting water fountains or Central Park attractions is best in August. Alternatively, December offers festive skating rink setups.");
+            } else if (isBusiness) {
+                mockAdvisory.append("💡 Expert Recommendation: New York is ideal for a ").append(tripType).append(". Midtown Manhattan hosts world-class conference centers and corporate venues.");
             } else {
                 mockAdvisory.append("💡 Expert Recommendation: August is prime festival season. Consider booking rooftop lounges or broadway outings during the mild autumn weeks.");
             }

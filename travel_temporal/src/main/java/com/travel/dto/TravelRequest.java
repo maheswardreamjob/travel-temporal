@@ -19,6 +19,7 @@ public class TravelRequest {
     private String hotelRating;
     private String transportVehicle;
     private int travelersCount;
+    private String tripType;
     private boolean includeInsurance;
     private boolean simulateFlightFailure;
     private boolean simulateHotelFailure;

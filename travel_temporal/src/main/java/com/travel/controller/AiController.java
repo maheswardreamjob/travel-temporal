@@ -262,6 +262,7 @@ public class AiController {
                 hotelRating,
                 transportVehicle,
                 travelersCount,
+                null, // tripType - not parsed from NL yet; UI controls this field
                 includeInsurance,
                 false, false, false, false, false // chaos simulations false by default
         );

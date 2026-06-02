@@ -25,6 +25,7 @@ function App() {
   const [hotelRating, setHotelRating] = useState('5-Star Luxury Resort')
   const [transportVehicle, setTransportVehicle] = useState('Tesla Model Y (EV)')
   const [travelersCount, setTravelersCount] = useState(2)
+  const [tripType, setTripType] = useState('Couple / Honeymoon Getaway')
   const [includeInsurance, setIncludeInsurance] = useState(true)
   const [simulateFlightFailure, setSimulateFlightFailure] = useState(false)
   const [simulateHotelFailure, setSimulateHotelFailure] = useState(false)
@@ -303,6 +304,7 @@ function App() {
       if (data.hotelRating) setHotelRating(data.hotelRating)
       if (data.transportVehicle) setTransportVehicle(data.transportVehicle)
       if (data.travelersCount) setTravelersCount(data.travelersCount)
+      if (data.tripType) setTripType(data.tripType)
       if (data.includeInsurance !== undefined) setIncludeInsurance(data.includeInsurance)
 
       addLog(`✨ [AI] Prompt parsed successfully! Destination: ${data.destination}, Travelers: ${data.travelersCount}, Class: ${data.travelClass}`, 'success')
@@ -363,6 +365,7 @@ function App() {
       if (data.hotelRating) setHotelRating(data.hotelRating)
       if (data.transportVehicle) setTransportVehicle(data.transportVehicle)
       if (data.travelersCount) setTravelersCount(data.travelersCount)
+      if (data.tripType) setTripType(data.tripType)
       if (data.includeInsurance !== undefined) setIncludeInsurance(data.includeInsurance)
 
       addLog(`✨ [AI Chat] Successfully parsed! Destination: ${data.destination}, Travelers: ${data.travelersCount}, Class: ${data.travelClass}`, 'success')
@@ -428,6 +431,7 @@ function App() {
             hotelRating,
             transportVehicle,
             travelersCount: parseInt(travelersCount),
+            tripType,
             includeInsurance,
             simulateFlightFailure,
             simulateHotelFailure,
@@ -1083,6 +1087,22 @@ function App() {
                       disabled={isBookingActive && !['CONFIRMED', 'CANCELLED', 'FAILED', 'NOT_FOUND'].includes(workflowStatus)}
                       required 
                     />
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">✈️ Trip Type</label>
+                    <select
+                      className="form-input"
+                      value={tripType}
+                      onChange={(e) => setTripType(e.target.value)}
+                      disabled={isBookingActive && !['CONFIRMED', 'CANCELLED', 'FAILED', 'NOT_FOUND'].includes(workflowStatus)}
+                    >
+                      <option value="Solo Trip">🧳 Solo Trip</option>
+                      <option value="Couple / Honeymoon Getaway">💑 Couple / Honeymoon Getaway</option>
+                      <option value="Family Vacation">👨‍👩‍👧‍👦 Family Vacation</option>
+                      <option value="Business Trip">💼 Business Trip</option>
+                      <option value="Group Adventure">🏕️ Group Adventure</option>
+                    </select>
                   </div>
 
                   <div className="form-group">
