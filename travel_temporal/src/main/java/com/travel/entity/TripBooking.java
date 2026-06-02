@@ -1,6 +1,7 @@
 package com.travel.entity;
 
 import jakarta.persistence.CascadeType;
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
@@ -31,6 +32,9 @@ public class TripBooking {
     private boolean includeInsurance;
     
     private String status; // PENDING, FLIGHT_BOOKED, HOTEL_BOOKED, CONFIRMED, CANCELLED
+    
+    @Column(length = 2000)
+    private String aiAdvisory;
     
     @OneToOne(cascade = CascadeType.ALL)
     @JoinColumn(name = "flight_booking_id")

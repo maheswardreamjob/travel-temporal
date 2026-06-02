@@ -11,9 +11,11 @@ import org.springframework.web.bind.annotation.*;
 public class TravelWorkflowController {
 
     private final TravelBookingWorkflowStarter starter;
+    private final com.travel.repository.TripBookingRepository tripBookingRepository;
 
-    public TravelWorkflowController(TravelBookingWorkflowStarter starter) {
+    public TravelWorkflowController(TravelBookingWorkflowStarter starter, com.travel.repository.TripBookingRepository tripBookingRepository) {
         this.starter = starter;
+        this.tripBookingRepository = tripBookingRepository;
     }
 
     // Endpoint to start the travel booking workflow
@@ -46,6 +48,20 @@ public class TravelWorkflowController {
     public ResponseEntity<String> getStatus(@PathVariable String userId) {
         String status = starter.getWorkflowStatus(userId);
         return ResponseEntity.ok(status);
+    }
+
+    // Endpoint to retrieve the AI advisory text
+    @GetMapping("/advisory/{userId}")
+    public ResponseEntity<java.util.Map<String, String>> getAdvisory(@PathVariable String userId) {
+        String bookingId = "travel_" + userId;
+        java.util.Map<String, String> response = new java.util.HashMap<>();
+        tripBookingRepository.findById(bookingId).ifPresentOrElse(
+            trip -> {
+                response.put("advisory", trip.getAiAdvisory() != null ? trip.getAiAdvisory() : "");
+            },
+            () -> response.put("advisory", "")
+        );
+        return ResponseEntity.ok(response);
     }
 
     // Endpoint to terminate Spring Boot JVM (Chaos Switch simulation)

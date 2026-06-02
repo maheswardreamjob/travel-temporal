@@ -29,6 +29,30 @@ function App() {
   const [simulateFlightFailure, setSimulateFlightFailure] = useState(false)
   const [simulateHotelFailure, setSimulateHotelFailure] = useState(false)
   const [simulateTransportFailure, setSimulateTransportFailure] = useState(false)
+  const [simulatePaymentFailure, setSimulatePaymentFailure] = useState(false)
+  const [simulateLoyaltyFailure, setSimulateLoyaltyFailure] = useState(false)
+
+  // AI Assisted State
+  const [bookingMode, setBookingMode] = useState('ai') // 'ai' or 'manual'
+  const [aiPrompt, setAiPrompt] = useState('I want to book a couple trip from Paris to Tokyo in Business Class. We want a 5-Star Luxury Resort and a Tesla transfer from 2026-07-10 to 2026-07-20.')
+  const [geminiKey, setGeminiKey] = useState(localStorage.getItem('gemini_api_key') || '')
+  const [isAiParsing, setIsAiParsing] = useState(false)
+  const [chatMessages, setChatMessages] = useState([
+    {
+      id: 'welcome',
+      sender: 'assistant',
+      text: "Hello! I am your AI Travel Assistant. Tell me about your destination, travel class, hotel preference, and dates, and I'll draft the booking details for you. Try clicking one of the presets below to see an example!"
+    }
+  ])
+  const [typedMessage, setTypedMessage] = useState('')
+  const [aiAdvisory, setAiAdvisory] = useState('')
+  const chatMessagesEndRef = useRef(null)
+
+  // Scroll chat window to bottom
+  useEffect(() => {
+    chatMessagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [chatMessages, isAiParsing])
+
 
   // UI / Workflow States
   const [isBookingActive, setIsBookingActive] = useState(false)
@@ -42,7 +66,8 @@ function App() {
   const isBackendOfflineRef = useRef(false)
   
   // Countdown Timer State
-  const [countdown, setCountdown] = useState(120) // 2 minutes
+  const [configuredTimeout, setConfiguredTimeout] = useState(120) // Default 120 seconds
+  const [countdown, setCountdown] = useState(120)
   const timerRef = useRef(null)
 
   // Real-time Event Console Logs
@@ -70,8 +95,8 @@ function App() {
   // Countdown timer logic for PENDING_USER_CONFIRMATION
   useEffect(() => {
     if (workflowStatus === 'PENDING_USER_CONFIRMATION') {
-      // Start a 120s timer
-      setCountdown(isOfflineSimulation ? 15 : 120) // Fast 15s timer for offline simulation demo
+      // Start configured timer
+      setCountdown(isOfflineSimulation ? 15 : configuredTimeout)
       
       timerRef.current = setInterval(() => {
         setCountdown((prev) => {
@@ -80,6 +105,10 @@ function App() {
             if (isOfflineSimulation) {
               // Trigger compensation locally
               triggerOfflineCompensation()
+            } else {
+              // Automatically cancel booking when timer expires
+              addLog(`[CLIENT] Timer expired. Automatically triggering cancellation signal for user: ${userId}`, 'warn')
+              handleCancelBooking()
             }
             return 0
           }
@@ -93,7 +122,7 @@ function App() {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current)
     }
-  }, [workflowStatus])
+  }, [workflowStatus, configuredTimeout, isOfflineSimulation, userId])
 
   // Polls backend status
   const startStatusPolling = (uid) => {
@@ -131,6 +160,33 @@ function App() {
     }, 1500)
   }
 
+  const getLocalMockAdvisory = (destVal) => {
+    const dest = destVal.toLowerCase()
+    if (dest.includes("tokyo") || dest.includes("japan")) {
+      return "🌸 Aura AI Advisor: Mild and pleasant weather is expected in Tokyo. Travel advisory: No visa required for short tourism visits. Safe travels!"
+    } else if (dest.includes("bali") || dest.includes("indonesia")) {
+      return "🌴 Aura AI Advisor: Rainy showers are common in Bali during this season. Note: Visa-on-Arrival (30 days) is required for entry. Travel insurance highly recommended."
+    } else if (dest.includes("london") || dest.includes("united kingdom") || dest.includes("uk")) {
+      return "☔ Aura AI Advisor: Occasional rain showers predicted in London. Please ensure your passport is valid for at least 6 months. Standard health guidelines apply."
+    }
+    return "✈️ Aura AI Advisor: Checked destination guidelines. Weather looks pleasant. Safe travels!"
+  }
+
+  const fetchAdvisory = async (uid) => {
+    try {
+      const response = await fetch(`${API_BASE}/advisory/${uid}`)
+      if (response.ok) {
+        const data = await response.json()
+        if (data.advisory) {
+          setAiAdvisory(data.advisory)
+          addLog(`🤖 [AI ADVISOR] ${data.advisory}`, 'warn')
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch advisory:', err)
+    }
+  }
+
   // Manage logs and terminal updates during status transitions
   const handleStatusTransition = (status) => {
     setWorkflowStatus(status)
@@ -150,6 +206,13 @@ function App() {
       case 'PENDING_USER_CONFIRMATION':
         addLog('🎉 [ACTIVITY] Executive transfer successfully arranged! Registering compensation.', 'success')
         addLog('⏳ [WORKFLOW] Checkpoint reached: Awaiting final passenger confirmation signal...', 'warn')
+        if (!isOfflineSimulation) {
+          fetchAdvisory(userId)
+        } else {
+          const mockAdv = getLocalMockAdvisory(destination)
+          setAiAdvisory(mockAdv)
+          addLog(`🤖 [AI ADVISOR] ${mockAdv}`, 'warn')
+        }
         break
       case 'CONFIRMED':
         addLog('📩 [WORKFLOW] Received user confirmation signal. Finalizing ledger transaction...', 'success')
@@ -198,6 +261,141 @@ function App() {
     return () => stopPolling()
   }, [])
 
+  const handleGeminiKeyChange = (key) => {
+    setGeminiKey(key)
+    localStorage.setItem('gemini_api_key', key)
+  }
+
+  // Action: Parse natural language prompt using Gemini
+  const handleAiParse = async (e) => {
+    e.preventDefault()
+    if (!aiPrompt.trim()) return
+
+    setIsAiParsing(true)
+    addLog(`🤖 [AI] Dispatching prompt to Gemini API for parsing...`, 'info')
+
+    try {
+      const response = await fetch(`${API_BASE}/ai/parse`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'X-Gemini-Key': geminiKey
+        },
+        body: JSON.stringify({
+          prompt: aiPrompt,
+          userId: userId || 'ai_passenger'
+        })
+      })
+
+      if (!response.ok) {
+        throw new Error(`Server returned code: ${response.status}`)
+      }
+
+      const data = await response.json()
+      
+      // Update manual form values with parsed parameters
+      if (data.userId) setUserId(data.userId)
+      if (data.origin) setOrigin(data.origin)
+      if (data.destination) setDestination(data.destination)
+      if (data.departureDate) setDepartureDate(data.departureDate)
+      if (data.returnDate) setReturnDate(data.returnDate)
+      if (data.travelClass) setTravelClass(data.travelClass)
+      if (data.hotelRating) setHotelRating(data.hotelRating)
+      if (data.transportVehicle) setTransportVehicle(data.transportVehicle)
+      if (data.travelersCount) setTravelersCount(data.travelersCount)
+      if (data.includeInsurance !== undefined) setIncludeInsurance(data.includeInsurance)
+
+      addLog(`✨ [AI] Prompt parsed successfully! Destination: ${data.destination}, Travelers: ${data.travelersCount}, Class: ${data.travelClass}`, 'success')
+      addLog(`🔄 [AI] Booking parameters pre-populated. Verify details in Manual Form and launch the Temporal saga.`, 'success')
+      
+      setBookingMode('manual') // Automatically switch to manual mode so user can review the populated form!
+
+    } catch (err) {
+      addLog(`❌ [AI] Parsing failed: ${err.message}`, 'danger')
+      addLog(`💡 [AI TIP] Check your Gemini API Key or try one of the presets.`, 'warn')
+    } finally {
+      setIsAiParsing(false)
+    }
+  }
+
+  // Action: Send a message to the AI Chat assistant
+  const handleSendMessage = async (textToSend) => {
+    const text = textToSend || typedMessage
+    if (!text.trim()) return
+
+    if (!textToSend) setTypedMessage('')
+
+    const userMsgId = 'msg-' + Date.now()
+    setChatMessages((prev) => [
+      ...prev,
+      { id: userMsgId, sender: 'user', text: text }
+    ])
+
+    setIsAiParsing(true)
+    addLog(`🤖 [AI Chat] Parsing message: "${text.substring(0, 40)}..."`, 'info')
+
+    try {
+      const response = await fetch(`${API_BASE}/ai/parse`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'X-Gemini-Key': geminiKey
+        },
+        body: JSON.stringify({
+          prompt: text,
+          userId: userId || 'ai_passenger'
+        })
+      })
+
+      if (!response.ok) {
+        throw new Error(`Server returned code: ${response.status}`)
+      }
+
+      const data = await response.json()
+      
+      // Update form values
+      if (data.userId) setUserId(data.userId)
+      if (data.origin) setOrigin(data.origin)
+      if (data.destination) setDestination(data.destination)
+      if (data.departureDate) setDepartureDate(data.departureDate)
+      if (data.returnDate) setReturnDate(data.returnDate)
+      if (data.travelClass) setTravelClass(data.travelClass)
+      if (data.hotelRating) setHotelRating(data.hotelRating)
+      if (data.transportVehicle) setTransportVehicle(data.transportVehicle)
+      if (data.travelersCount) setTravelersCount(data.travelersCount)
+      if (data.includeInsurance !== undefined) setIncludeInsurance(data.includeInsurance)
+
+      addLog(`✨ [AI Chat] Successfully parsed! Destination: ${data.destination}, Travelers: ${data.travelersCount}, Class: ${data.travelClass}`, 'success')
+
+      const replyText = `I've prepared your luxury trip details to **${data.destination}**! Here is a summary of your itinerary draft. You can launch this Temporal booking workflow directly using the action buttons below:`
+
+      setChatMessages((prev) => [
+        ...prev,
+        {
+          id: 'reply-' + Date.now(),
+          sender: 'assistant',
+          text: replyText,
+          tripData: data
+        }
+      ])
+    } catch (err) {
+      addLog(`❌ [AI Chat] Parsing failed: ${err.message}`, 'danger')
+      setChatMessages((prev) => [
+        ...prev,
+        {
+          id: 'error-' + Date.now(),
+          sender: 'assistant',
+          text: `I encountered an error trying to process that: "${err.message}". Please check your connection or try another request.`
+        }
+      ])
+    } finally {
+      setIsAiParsing(false)
+    }
+  }
+
+
+
+
   // Action: Launch the workflow
   const handleStartBooking = async (e) => {
     e.preventDefault()
@@ -207,6 +405,7 @@ function App() {
     setWorkflowStatus('PENDING_START')
     setWorkflowId('')
     setWorkflowRunId('')
+    setAiAdvisory('')
     setLogs([{ time: new Date().toLocaleTimeString(), msg: `🚀 Launching Travel Booking Workflow for User: ${userId}`, type: 'info' }])
 
     if (isOfflineSimulation) {
@@ -232,7 +431,9 @@ function App() {
             includeInsurance,
             simulateFlightFailure,
             simulateHotelFailure,
-            simulateTransportFailure
+            simulateTransportFailure,
+            simulatePaymentFailure,
+            simulateLoyaltyFailure
           })
         })
 
@@ -395,14 +596,30 @@ function App() {
       return { className: 'pending', label: 'PENDING' }
     }
 
+    if (stepName === 'booking-reservations') {
+      if (['INITIALIZING_TRIP', 'RESERVING_PARALLEL'].includes(workflowStatus)) {
+        return { className: 'active', label: 'RESERVING...' }
+      }
+      if (['COMPENSATING', 'COMPENSATING_FLIGHT', 'COMPENSATING_HOTEL', 'COMPENSATING_TRANSPORT'].includes(workflowStatus)) {
+        return { className: 'compensating', label: 'COMPENSATING...' }
+      }
+      if (['PENDING_USER_CONFIRMATION', 'PAYMENT_IN_PROGRESS', 'BILLING_CHARGED', 'BILLING_INVOICED', 'BILLING_COMPLETED', 'CONFIRMED'].includes(workflowStatus)) {
+        return { className: 'completed', label: 'RESERVED' }
+      }
+      if (workflowStatus === 'CANCELLED') {
+        return { className: 'compensated-done', label: 'CANCELLED & COMPENSATED' }
+      }
+      return { className: 'pending', label: 'PENDING' }
+    }
+
     if (stepName === 'flight') {
-      if (workflowStatus === 'FLIGHT_BOOKING_IN_PROGRESS') {
-        return { className: 'active', label: 'BOOKING...' }
+      if (workflowStatus === 'RESERVING_PARALLEL') {
+        return { className: 'active', label: 'RESERVING...' }
       }
       if (workflowStatus === 'COMPENSATING_FLIGHT') {
         return { className: 'compensating', label: 'COMPENSATING...' }
       }
-      if (['HOTEL_BOOKING_IN_PROGRESS', 'TRANSPORT_ARRANGING_IN_PROGRESS', 'PENDING_USER_CONFIRMATION', 'CONFIRMED', 'COMPENSATING_TRANSPORT', 'COMPENSATING_HOTEL'].includes(workflowStatus)) {
+      if (['PENDING_USER_CONFIRMATION', 'PAYMENT_IN_PROGRESS', 'BILLING_CHARGED', 'BILLING_INVOICED', 'BILLING_COMPLETED', 'CONFIRMED', 'COMPENSATING_TRANSPORT', 'COMPENSATING_HOTEL'].includes(workflowStatus)) {
         return { className: 'completed', label: 'COMPLETED' }
       }
       if (workflowStatus === 'CANCELLED') {
@@ -412,13 +629,13 @@ function App() {
     }
 
     if (stepName === 'hotel') {
-      if (workflowStatus === 'HOTEL_BOOKING_IN_PROGRESS') {
-        return { className: 'active', label: 'BOOKING...' }
+      if (workflowStatus === 'RESERVING_PARALLEL') {
+        return { className: 'active', label: 'RESERVING...' }
       }
       if (workflowStatus === 'COMPENSATING_HOTEL') {
         return { className: 'compensating', label: 'COMPENSATING...' }
       }
-      if (['TRANSPORT_ARRANGING_IN_PROGRESS', 'PENDING_USER_CONFIRMATION', 'CONFIRMED', 'COMPENSATING_TRANSPORT'].includes(workflowStatus)) {
+      if (['PENDING_USER_CONFIRMATION', 'PAYMENT_IN_PROGRESS', 'BILLING_CHARGED', 'BILLING_INVOICED', 'BILLING_COMPLETED', 'CONFIRMED', 'COMPENSATING_TRANSPORT'].includes(workflowStatus)) {
         return { className: 'completed', label: 'COMPLETED' }
       }
       if (workflowStatus === 'CANCELLED') {
@@ -433,13 +650,13 @@ function App() {
     }
 
     if (stepName === 'transport') {
-      if (workflowStatus === 'TRANSPORT_ARRANGING_IN_PROGRESS') {
-        return { className: 'active', label: 'ARRANGING...' }
+      if (workflowStatus === 'RESERVING_PARALLEL') {
+        return { className: 'active', label: 'RESERVING...' }
       }
       if (workflowStatus === 'COMPENSATING_TRANSPORT') {
         return { className: 'compensating', label: 'COMPENSATING...' }
       }
-      if (['PENDING_USER_CONFIRMATION', 'CONFIRMED'].includes(workflowStatus)) {
+      if (['PENDING_USER_CONFIRMATION', 'PAYMENT_IN_PROGRESS', 'BILLING_CHARGED', 'BILLING_INVOICED', 'BILLING_COMPLETED', 'CONFIRMED'].includes(workflowStatus)) {
         return { className: 'completed', label: 'COMPLETED' }
       }
       if (workflowStatus === 'CANCELLED') {
@@ -455,10 +672,10 @@ function App() {
 
     if (stepName === 'confirm') {
       if (workflowStatus === 'PENDING_USER_CONFIRMATION') {
-        return { className: 'active', label: 'AWAITING ACCEPTANCE' }
+        return { className: 'active', label: 'AWAITING CONFIRMATION' }
       }
-      if (workflowStatus === 'CONFIRMED') {
-        return { className: 'completed', label: 'ACCEPTED' }
+      if (['PAYMENT_IN_PROGRESS', 'BILLING_CHARGED', 'BILLING_INVOICED', 'BILLING_COMPLETED', 'CONFIRMED'].includes(workflowStatus)) {
+        return { className: 'completed', label: 'CONFIRMED' }
       }
       if (workflowStatus === 'CANCELLED') {
         if (simulateFlightFailure || simulateHotelFailure || simulateTransportFailure) {
@@ -468,6 +685,67 @@ function App() {
       }
       if (['COMPENSATING_FLIGHT', 'COMPENSATING_HOTEL', 'COMPENSATING_TRANSPORT'].includes(workflowStatus)) {
         return { className: 'failed', label: 'CANCELLED' }
+      }
+      return { className: 'pending', label: 'PENDING' }
+    }
+
+    if (stepName === 'payment-workflow') {
+      if (['PAYMENT_IN_PROGRESS', 'BILLING_CHARGED', 'BILLING_INVOICED'].includes(workflowStatus)) {
+        return { className: 'active', label: 'PROCESSING...' }
+      }
+      if (['BILLING_COMPLETED', 'CONFIRMED'].includes(workflowStatus)) {
+        return { className: 'completed', label: 'COMPLETED' }
+      }
+      if (workflowStatus === 'CANCELLED') {
+        if (simulatePaymentFailure || simulateLoyaltyFailure) {
+          return { className: 'failed', label: 'FAILED & REVERTED' }
+        }
+        return { className: 'pending', label: 'SKIPPED' }
+      }
+      if (workflowStatus === 'COMPENSATING') {
+        return { className: 'compensating', label: 'REVERTING...' }
+      }
+      return { className: 'pending', label: 'PENDING' }
+    }
+
+    if (stepName === 'payment-charge') {
+      if (workflowStatus === 'PAYMENT_IN_PROGRESS') {
+        return { className: 'active', label: 'CHARGING...' }
+      }
+      if (['BILLING_CHARGED', 'BILLING_INVOICED', 'BILLING_COMPLETED', 'CONFIRMED'].includes(workflowStatus)) {
+        return { className: 'completed', label: 'CHARGED' }
+      }
+      if (workflowStatus === 'CANCELLED') {
+        if (simulatePaymentFailure) return { className: 'failed', label: 'DECLINED' }
+        if (simulateLoyaltyFailure) return { className: 'compensated-done', label: 'REFUNDED' }
+        return { className: 'pending', label: 'SKIPPED' }
+      }
+      return { className: 'pending', label: 'PENDING' }
+    }
+
+    if (stepName === 'payment-invoice') {
+      if (workflowStatus === 'BILLING_CHARGED') {
+        return { className: 'active', label: 'ISSUING...' }
+      }
+      if (['BILLING_INVOICED', 'BILLING_COMPLETED', 'CONFIRMED'].includes(workflowStatus)) {
+        return { className: 'completed', label: 'ISSUED' }
+      }
+      if (workflowStatus === 'CANCELLED') {
+        return { className: 'pending', label: 'SKIPPED' }
+      }
+      return { className: 'pending', label: 'PENDING' }
+    }
+
+    if (stepName === 'payment-loyalty') {
+      if (workflowStatus === 'BILLING_INVOICED') {
+        return { className: 'active', label: 'CREDITING...' }
+      }
+      if (['BILLING_COMPLETED', 'CONFIRMED'].includes(workflowStatus)) {
+        return { className: 'completed', label: 'CREDITED' }
+      }
+      if (workflowStatus === 'CANCELLED') {
+        if (simulateLoyaltyFailure) return { className: 'failed', label: 'FAILED' }
+        return { className: 'pending', label: 'SKIPPED' }
       }
       return { className: 'pending', label: 'PENDING' }
     }
@@ -511,10 +789,10 @@ function App() {
           <span>🎫</span> Application
         </button>
         <button 
-          className={`tab-btn ${activeTab === 'auditing' ? 'active' : ''}`}
-          onClick={() => setActiveTab('auditing')}
+          className={`tab-btn ${activeTab === 'admin' ? 'active' : ''}`}
+          onClick={() => setActiveTab('admin')}
         >
-          <span>🕵️</span> Auditing
+          <span>⚙️</span> Admin
         </button>
       </div>
 
@@ -564,11 +842,221 @@ function App() {
 
             {/* Form Card */}
             <div className="glass-card">
-              <h2 className="card-title">
-                <span style={{ fontSize: '1.5rem' }}>🎫</span> Book Premium Journey
+              <h2 className="card-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span>🎫 Book Premium Journey</span>
+                <div className="ai-mode-selector" style={{ display: 'flex', gap: '6px' }}>
+                  <button 
+                    type="button" 
+                    className={`mode-btn ${bookingMode === 'ai' ? 'active' : ''}`}
+                    onClick={() => setBookingMode('ai')}
+                    style={{
+                      padding: '5px 12px', fontSize: '0.8rem', borderRadius: '6px',
+                      background: bookingMode === 'ai' ? 'var(--primary)' : 'rgba(255,255,255,0.05)',
+                      color: 'white', border: 'none', cursor: 'pointer', transition: 'all 0.3s',
+                      fontWeight: 600
+                    }}
+                  >
+                    ✨ AI Assistant
+                  </button>
+                  <button 
+                    type="button" 
+                    className={`mode-btn ${bookingMode === 'manual' ? 'active' : ''}`}
+                    onClick={() => setBookingMode('manual')}
+                    style={{
+                      padding: '5px 12px', fontSize: '0.8rem', borderRadius: '6px',
+                      background: bookingMode === 'manual' ? 'var(--primary)' : 'rgba(255,255,255,0.05)',
+                      color: 'white', border: 'none', cursor: 'pointer', transition: 'all 0.3s',
+                      fontWeight: 600
+                    }}
+                  >
+                    ✍️ Manual Form
+                  </button>
+                </div>
               </h2>
               
-              <form onSubmit={handleStartBooking}>
+              {bookingMode === 'ai' ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  {/* Chat widget container */}
+                  <div className="chat-container">
+                    <div className="chat-messages">
+                      {chatMessages.map((msg) => (
+                        <div key={msg.id} className={`chat-message ${msg.sender}`}>
+                          <span className="chat-sender-name">
+                            {msg.sender === 'user' ? 'You' : 'Aura Travel AI'}
+                          </span>
+                          <div className="chat-bubble">
+                            <p style={{ margin: 0 }} dangerouslySetInnerHTML={{ __html: msg.text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') }}></p>
+                            
+                            {/* Render a dynamic summary card if tripData is attached */}
+                            {msg.tripData && (
+                              <div className="chat-trip-card">
+                                <div className="chat-trip-header">
+                                  <span>✈️ {msg.tripData.destination}</span>
+                                  <span style={{ fontSize: '0.75rem', background: 'rgba(168, 85, 247, 0.15)', color: 'var(--primary)', padding: '2px 6px', borderRadius: '4px' }}>
+                                    {msg.tripData.travelClass}
+                                  </span>
+                                </div>
+                                <div className="chat-trip-details">
+                                  <div className="chat-trip-row">
+                                    <span className="label">Origin:</span>
+                                    <span className="val">{msg.tripData.origin}</span>
+                                  </div>
+                                  <div className="chat-trip-row">
+                                    <span className="label">Dates:</span>
+                                    <span className="val">{msg.tripData.departureDate} to {msg.tripData.returnDate}</span>
+                                  </div>
+                                  <div className="chat-trip-row">
+                                    <span className="label">Hotel:</span>
+                                    <span className="val">{msg.tripData.hotelRating}</span>
+                                  </div>
+                                  <div className="chat-trip-row">
+                                    <span className="label">Transport:</span>
+                                    <span className="val">{msg.tripData.transportVehicle}</span>
+                                  </div>
+                                  <div className="chat-trip-row">
+                                    <span className="label">Guests:</span>
+                                    <span className="val">{msg.tripData.travelersCount} traveler(s)</span>
+                                  </div>
+                                </div>
+                                <div className="chat-trip-actions">
+                                  <button
+                                    type="button"
+                                    className="chat-action-btn primary"
+                                    onClick={() => {
+                                      setBookingMode('manual')
+                                      addLog("🔄 Form parameters loaded from chat card. Ready for review.", "success")
+                                    }}
+                                  >
+                                    ✍️ Review Form
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                      
+                      {isAiParsing && (
+                        <div className="typing-indicator">
+                          <span className="typing-dot"></span>
+                          <span className="typing-dot"></span>
+                          <span className="typing-dot"></span>
+                        </div>
+                      )}
+                      
+                      <div ref={chatMessagesEndRef} />
+                    </div>
+
+                    {/* Chat Input Box */}
+                    <form 
+                      onSubmit={(e) => {
+                        e.preventDefault()
+                        handleSendMessage()
+                      }}
+                      className="chat-input-bar"
+                    >
+                      <input
+                        type="text"
+                        className="chat-input-field"
+                        value={typedMessage}
+                        onChange={(e) => setTypedMessage(e.target.value)}
+                        placeholder="Say e.g., Plan a luxury family trip to Sydney from Mumbai starting 2026-08-10..."
+                        disabled={isAiParsing}
+                      />
+                      <button 
+                        type="submit" 
+                        className="chat-send-btn"
+                        disabled={isAiParsing || !typedMessage.trim()}
+                      >
+                        <span>🪄</span> Ask
+                      </button>
+                    </form>
+                  </div>
+
+                  {/* Gemini API Key input in Chat Panel */}
+                  <div className="form-group" style={{ margin: '0' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                      <label className="form-label" style={{ margin: 0, fontSize: '0.75rem' }}>Gemini API Key (Optional)</label>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--primary)', fontWeight: 600 }}>Gemini 2.5 Flash</span>
+                    </div>
+                    <input
+                      type="password"
+                      className="form-input"
+                      style={{ background: 'rgba(210, 199, 183, 0.4)', fontSize: '0.8rem', padding: '8px 12px' }}
+                      value={geminiKey}
+                      onChange={(e) => handleGeminiKeyChange(e.target.value)}
+                      placeholder="Enter Gemini API Key (stored in local browser storage)"
+                      disabled={isAiParsing}
+                    />
+                  </div>
+
+                  {/* Presets in Chat panel */}
+                  <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '12px' }}>
+                    <label className="form-label" style={{ fontSize: '0.72rem', color: 'var(--slate-400)', marginBottom: '8px', display: 'block' }}>
+                      💡 Preset Prompt Suggestions (Click to send):
+                    </label>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                      <button
+                        type="button"
+                        className="preset-btn"
+                        onClick={() => handleSendMessage("I want to book a couple trip from Paris to Tokyo in Business Class. We want a 5-Star Luxury Resort and a Tesla transfer from 2026-07-10 to 2026-07-20.")}
+                        style={{
+                          padding: '6px 12px', borderRadius: '6px', background: 'rgba(255,255,255,0.03)',
+                          border: '1px solid rgba(255,255,255,0.06)', color: 'var(--slate-300)', fontSize: '0.75rem',
+                          cursor: 'pointer', transition: 'all 0.2s'
+                        }}
+                      >
+                        🇯🇵 Tokyo Honeymoon
+                      </button>
+                      <button
+                        type="button"
+                        className="preset-btn"
+                        onClick={() => handleSendMessage("Solo trip from Mumbai to London from 2026-08-01 to 2026-08-08 in Premium Economy. 4-Star Premium Hotel with a Mercedes S-Class transfer. No insurance.")}
+                        style={{
+                          padding: '6px 12px', borderRadius: '6px', background: 'rgba(255,255,255,0.03)',
+                          border: '1px solid rgba(255,255,255,0.06)', color: 'var(--slate-300)', fontSize: '0.75rem',
+                          cursor: 'pointer', transition: 'all 0.2s'
+                        }}
+                      >
+                        🇬🇧 London Business
+                      </button>
+                      <button
+                        type="button"
+                        className="preset-btn"
+                        onClick={() => handleSendMessage("Family trip for 4 from New York to Bali from 2026-09-12 to 2026-09-19 in Economy Class. Boutique Penthouse Suite and Cadillac SUV transfer.")}
+                        style={{
+                          padding: '6px 12px', borderRadius: '6px', background: 'rgba(255,255,255,0.03)',
+                          border: '1px solid rgba(255,255,255,0.06)', color: 'var(--slate-300)', fontSize: '0.75rem',
+                          cursor: 'pointer', transition: 'all 0.2s'
+                        }}
+                      >
+                        🇮🇩 Bali Vacation
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <form onSubmit={handleStartBooking}>
+                  {/* Banner indicating AI generated values */}
+                  <div style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    padding: '10px 16px', borderRadius: '8px', background: 'rgba(168, 85, 247, 0.1)',
+                    border: '1px solid rgba(168, 85, 247, 0.2)', marginBottom: '20px', fontSize: '0.85rem',
+                    color: 'var(--slate-200)'
+                  }}>
+                    <span>✨ Parameters generated by AI. Review fields below:</span>
+                    <button
+                      type="button"
+                      onClick={() => setBookingMode('ai')}
+                      style={{
+                        background: 'transparent', border: 'none', color: 'var(--primary)',
+                        cursor: 'pointer', fontWeight: 'bold', textDecoration: 'underline',
+                        fontSize: '0.85rem'
+                      }}
+                    >
+                      Edit Prompt
+                    </button>
+                  </div>
                 <div className="form-grid">
                   <div className="form-group">
                     <label className="form-label">User ID / Handle</label>
@@ -753,12 +1241,50 @@ function App() {
                           if (e.target.checked) {
                             setSimulateFlightFailure(false)
                             setSimulateHotelFailure(false)
+                            setSimulatePaymentFailure(false)
+                            setSimulateLoyaltyFailure(false)
                           }
                         }}
                         disabled={isBookingActive && !['CONFIRMED', 'CANCELLED', 'FAILED', 'NOT_FOUND'].includes(workflowStatus)}
                         style={{ width: '16px', height: '16px', accentColor: 'var(--danger)' }}
                       />
                       Simulate Transport API Failure
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.9rem', color: 'var(--slate-300)', cursor: 'pointer' }}>
+                      <input 
+                        type="checkbox" 
+                        checked={simulatePaymentFailure}
+                        onChange={(e) => {
+                          setSimulatePaymentFailure(e.target.checked)
+                          if (e.target.checked) {
+                            setSimulateFlightFailure(false)
+                            setSimulateHotelFailure(false)
+                            setSimulateTransportFailure(false)
+                            setSimulateLoyaltyFailure(false)
+                          }
+                        }}
+                        disabled={isBookingActive && !['CONFIRMED', 'CANCELLED', 'FAILED', 'NOT_FOUND'].includes(workflowStatus)}
+                        style={{ width: '16px', height: '16px', accentColor: 'var(--danger)' }}
+                      />
+                      Simulate Payment Failure
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.9rem', color: 'var(--slate-300)', cursor: 'pointer' }}>
+                      <input 
+                        type="checkbox" 
+                        checked={simulateLoyaltyFailure}
+                        onChange={(e) => {
+                          setSimulateLoyaltyFailure(e.target.checked)
+                          if (e.target.checked) {
+                            setSimulateFlightFailure(false)
+                            setSimulateHotelFailure(false)
+                            setSimulateTransportFailure(false)
+                            setSimulatePaymentFailure(false)
+                          }
+                        }}
+                        disabled={isBookingActive && !['CONFIRMED', 'CANCELLED', 'FAILED', 'NOT_FOUND'].includes(workflowStatus)}
+                        style={{ width: '16px', height: '16px', accentColor: 'var(--danger)' }}
+                      />
+                      Simulate Loyalty Failure
                     </label>
                   </div>
                 </div>
@@ -772,6 +1298,7 @@ function App() {
                   <span>🚀</span> Launch Premium Booking Workflow
                 </button>
               </form>
+            )}
 
               {isBookingActive && ['CONFIRMED', 'CANCELLED', 'FAILED', 'NOT_FOUND'].includes(workflowStatus) && (
                 <button 
@@ -874,142 +1401,246 @@ function App() {
                 </div>
               )}
 
-              <div className="pipeline-container">
-                
-                {/* Step 1: Flight */}
-                {(() => {
-                  const details = getStepDetails('flight');
-                  return (
-                    <div className={`pipeline-step ${details.className}`}>
-                      <div className="step-circle">✈️</div>
-                      <div className="step-content">
-                        <div className="step-header">
-                          <h4 className="step-title">Book Flight</h4>
-                          <span className={`step-status ${details.className}`}>{details.label}</span>
+              <div className={isBookingActive ? "pipeline-layout active-booking" : "pipeline-layout"}>
+                <div className="pipeline-container" style={{ paddingLeft: '0px' }}>
+                  
+                  {/* Step 1: Booking Reservations (Parent Step with Parallel Children) */}
+                  {(() => {
+                    const parentDetails = getStepDetails('booking-reservations');
+                    const flightDetails = getStepDetails('flight');
+                    const hotelDetails = getStepDetails('hotel');
+                    const transportDetails = getStepDetails('transport');
+                    
+                    return (
+                      <div className={`pipeline-step ${parentDetails.className}`}>
+                        <div className="step-circle">🎫</div>
+                        <div className="step-content">
+                          <div className="step-header">
+                            <h4 className="step-title">Booking Reservations (Parallel Phase)</h4>
+                            <span className={`step-status ${parentDetails.className}`}>{parentDetails.label}</span>
+                          </div>
+                          <p className="step-desc">Reserves flight, hotel, and local transport concurrently in parallel.</p>
+                          
+                          <div className="sub-steps-container">
+                            <div className={`sub-step-pill ${flightDetails.className}`}>
+                              <span className="sub-icon">✈️</span> Flight: {flightDetails.label}
+                            </div>
+                            <div className={`sub-step-pill ${hotelDetails.className}`}>
+                              <span className="sub-icon">🏨</span> Hotel: {hotelDetails.label}
+                            </div>
+                            <div className={`sub-step-pill ${transportDetails.className}`}>
+                              <span className="sub-icon">🚗</span> Transport: {transportDetails.label}
+                            </div>
+                          </div>
                         </div>
-                        <p className="step-desc">Reserves airline seat to destination. Comp: `cancelFlight`</p>
                       </div>
-                    </div>
-                  );
-                })()}
+                    );
+                  })()}
 
-                {/* Step 2: Hotel */}
-                {(() => {
-                  const details = getStepDetails('hotel');
-                  return (
-                    <div className={`pipeline-step ${details.className}`}>
-                      <div className="step-circle">🏨</div>
-                      <div className="step-content">
-                        <div className="step-header">
-                          <h4 className="step-title">Book Hotel</h4>
-                          <span className={`step-status ${details.className}`}>{details.label}</span>
+                  {/* Step 2: User Confirmation Checkpoint */}
+                  {(() => {
+                    const details = getStepDetails('confirm');
+                    return (
+                      <div className={`pipeline-step ${details.className}`}>
+                        <div className="step-circle">⏳</div>
+                        <div className="step-content">
+                          <div className="step-header">
+                            <h4 className="step-title">Awaiting for TripConfirmation</h4>
+                            <span className={`step-status ${details.className}`}>{details.label}</span>
+                          </div>
+                          <p className="step-desc">Awaits manual trip confirmation. Initiates compensation if timeout occurs.</p>
                         </div>
-                        <p className="step-desc">Books double-room room for target dates. Comp: `cancelHotel`</p>
                       </div>
-                    </div>
-                  );
-                })()}
+                    );
+                  })()}
 
-                {/* Step 3: Local Transport */}
-                {(() => {
-                  const details = getStepDetails('transport');
-                  return (
-                    <div className={`pipeline-step ${details.className}`}>
-                      <div className="step-circle">🚗</div>
-                      <div className="step-content">
-                        <div className="step-header">
-                          <h4 className="step-title">Arrange Local Transport</h4>
-                          <span className={`step-status ${details.className}`}>{details.label}</span>
+                  {/* Step 3: Child Payment Workflow (Parent Step with Sequential Children) */}
+                  {(() => {
+                    const parentDetails = getStepDetails('payment-workflow');
+                    const chargeDetails = getStepDetails('payment-charge');
+                    const invoiceDetails = getStepDetails('payment-invoice');
+                    const loyaltyDetails = getStepDetails('payment-loyalty');
+                    
+                    return (
+                      <div className={`pipeline-step ${parentDetails.className}`}>
+                        <div className="step-circle">💳</div>
+                        <div className="step-content">
+                          <div className="step-header">
+                            <h4 className="step-title">Child Payment Workflow</h4>
+                            <span className={`step-status ${parentDetails.className}`}>{parentDetails.label}</span>
+                          </div>
+                          <p className="step-desc">Orchestrates card charge, invoicing, and loyalty points inside a sub-workflow.</p>
+                          
+                          <div className="sub-steps-container">
+                            <div className={`sub-step-pill ${chargeDetails.className}`}>
+                              <span className="sub-icon">💳</span> Card Charge: {chargeDetails.label}
+                            </div>
+                            <div className={`sub-step-pill ${invoiceDetails.className}`}>
+                              <span className="sub-icon">🧾</span> Invoice: {invoiceDetails.label}
+                            </div>
+                            <div className={`sub-step-pill ${loyaltyDetails.className}`}>
+                              <span className="sub-icon">🎁</span> Loyalty: {loyaltyDetails.label}
+                            </div>
+                          </div>
                         </div>
-                        <p className="step-desc">Dispatches executive airport transfer. Comp: `cancelTransport`</p>
                       </div>
-                    </div>
-                  );
-                })()}
+                    );
+                  })()}
 
-                {/* Step 4: User Confirmation Signal */}
-                {(() => {
-                  const details = getStepDetails('confirm');
-                  return (
-                    <div className={`pipeline-step ${details.className}`}>
-                      <div className="step-circle">⏳</div>
-                      <div className="step-content">
-                        <div className="step-header">
-                          <h4 className="step-title">Trip Acceptance Checkpoint</h4>
-                          <span className={`step-status ${details.className}`}>{details.label}</span>
+                  {/* Step 4: Finalized */}
+                  {(() => {
+                    const details = getStepDetails('finalize');
+                    return (
+                      <div className={`pipeline-step ${details.className}`}>
+                        <div className="step-circle">🎉</div>
+                        <div className="step-content">
+                          <div className="step-header">
+                            <h4 className="step-title">Finalize Travel Booking</h4>
+                            <span className={`step-status ${details.className}`}>{details.label}</span>
+                          </div>
+                          <p className="step-desc">Commits booking ledger. Completes workflow successfully.</p>
                         </div>
-                        <p className="step-desc">Awaits manual trip acceptance. Initiates compensation if timeout occurs.</p>
                       </div>
-                    </div>
-                  );
-                })()}
+                    );
+                  })()}
 
-                {/* Step 5: Finalized */}
-                {(() => {
-                  const details = getStepDetails('finalize');
-                  return (
-                    <div className={`pipeline-step ${details.className}`}>
-                      <div className="step-circle">🎉</div>
-                      <div className="step-content">
-                        <div className="step-header">
-                          <h4 className="step-title">Finalize Travel Booking</h4>
-                          <span className={`step-status ${details.className}`}>{details.label}</span>
-                        </div>
-                        <p className="step-desc">Commits booking ledger. Completes workflow successfully.</p>
-                      </div>
-                    </div>
-                  );
-                })()}
-
-              </div>
-
-              {/* Countdown and Confirmation Area */}
-              {isBookingActive && workflowStatus === 'PENDING_USER_CONFIRMATION' && (
-                <div className="confirmation-box">
-                  <div className="confirmation-header">
-                    <div className="confirmation-title">
-                      <span>⚠️</span> Acceptance Required
-                    </div>
-                    <div className="countdown-badge">
-                      <span>⏰</span> {countdown}s remaining
-                    </div>
-                  </div>
-                  <p style={{ margin: '0 0 16px 0', fontSize: '0.9rem', color: 'var(--slate-400)' }}>
-                    The booking resources are provisionally reserved. Click the button below to issue a Temporal signal to confirm. If the timer runs out, the transaction will automatically run compensation activities.
-                  </p>
-                  <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
-                    <button className="btn-confirm" onClick={handleConfirmBooking} style={{ flex: 1 }}>
-                      ✅ Confirm Booking
-                    </button>
-                    <button className="btn-confirm" onClick={handleCancelBooking} style={{ flex: 1, backgroundColor: 'var(--danger)', backgroundImage: 'none', boxShadow: 'none' }}>
-                      ❌ Cancel Booking
-                    </button>
-                  </div>
                 </div>
-              )}
-              {isBookingActive && !isOfflineSimulation && !['CONFIRMED', 'CANCELLED', 'FAILED', 'NOT_FOUND'].includes(workflowStatus) && (
-                <button 
-                  className="btn-kill"
-                  onClick={handleKillBackend}
-                  style={{
-                    marginTop: '20px',
-                    width: '100%',
-                    padding: '12px',
-                    borderRadius: '10px',
-                    border: '1px solid rgba(239, 68, 68, 0.3)',
-                    fontFamily: 'var(--font-heading)',
-                    fontWeight: 700,
-                    fontSize: '0.95rem',
-                    cursor: 'pointer',
-                    background: 'rgba(239, 68, 68, 0.1)',
-                    color: 'var(--danger)',
-                    boxShadow: 'none',
-                    transition: 'all 0.3s'
-                  }}
-                >
-                  💥 Kill Spring Boot Worker Instance
-                </button>
-              )}
+
+                {isBookingActive && (
+                  <div className="pipeline-controls">
+                    {/* Countdown and Confirmation Area */}
+                    {workflowStatus === 'PENDING_USER_CONFIRMATION' && (
+                      <div className="confirmation-box" style={{ marginTop: '0px' }}>
+                        <div className="confirmation-header">
+                          <div className="confirmation-title">
+                            <span>⚠️</span> Confirmation Required
+                          </div>
+                          <div className="countdown-badge">
+                            <span>⏰</span> {countdown}s remaining
+                          </div>
+                        </div>
+                        <p style={{ margin: '0 0 16px 0', fontSize: '0.9rem', color: 'var(--slate-400)' }}>
+                          The booking resources are provisionally reserved. Click the button below to issue a Temporal signal to confirm. If the timer runs out, the transaction will automatically run compensation activities.
+                        </p>
+                        {aiAdvisory && (() => {
+                          const prefix = "✨ Aura AI Advisor:";
+                          let content = aiAdvisory;
+                          let hasHeader = false;
+                          if (content.startsWith(prefix)) {
+                            content = content.substring(prefix.length).trim();
+                            hasHeader = true;
+                          }
+                          const lines = content.split('\n').filter(line => line.trim().length > 0);
+                          return (
+                            <div style={{
+                              padding: '16px', borderRadius: '12px', background: 'rgba(28, 62, 42, 0.12)',
+                              border: '1px solid rgba(16, 185, 129, 0.25)', marginBottom: '16px', fontSize: '0.85rem',
+                              color: 'var(--text-h)', lineHeight: '1.4', fontFamily: 'var(--font-sans)',
+                              textAlign: 'left'
+                            }}>
+                              {hasHeader && (
+                                <div style={{ 
+                                  fontWeight: 'bold', 
+                                  fontSize: '0.95rem', 
+                                  color: 'var(--accent)', 
+                                  borderBottom: '1px dashed rgba(16, 185, 129, 0.35)', 
+                                  paddingBottom: '8px', 
+                                  marginBottom: '12px',
+                                  fontFamily: 'var(--heading)'
+                                }}>
+                                  ✨ Aura AI Advisor
+                                </div>
+                              )}
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                {lines.map((line, idx) => {
+                                  const colonIndex = line.indexOf(':');
+                                  if (colonIndex !== -1) {
+                                    const label = line.substring(0, colonIndex).trim();
+                                    const description = line.substring(colonIndex + 1).trim();
+                                    return (
+                                      <div key={idx} style={{ 
+                                        display: 'flex', 
+                                        flexDirection: 'column', 
+                                        gap: '4px',
+                                        background: 'rgba(255, 255, 255, 0.02)',
+                                        padding: '8px 12px',
+                                        borderRadius: '6px',
+                                        borderLeft: '3px solid var(--accent)'
+                                      }}>
+                                        <span style={{ 
+                                          fontFamily: 'var(--heading)', 
+                                          fontWeight: '800', 
+                                          color: 'var(--accent)', 
+                                          fontSize: '0.78rem',
+                                          textTransform: 'uppercase',
+                                          letterSpacing: '0.5px'
+                                        }}>
+                                          {label}
+                                        </span>
+                                        <span style={{ 
+                                          fontFamily: 'var(--mono)', 
+                                          fontWeight: '400', 
+                                          color: 'var(--text)', 
+                                          fontSize: '0.8rem',
+                                          lineHeight: '1.4'
+                                        }}>
+                                          {description}
+                                        </span>
+                                      </div>
+                                    );
+                                  }
+                                  return (
+                                    <div key={idx} style={{ 
+                                      fontFamily: 'var(--sans)', 
+                                      fontWeight: '400', 
+                                      color: 'var(--text)', 
+                                      fontSize: '0.8rem' 
+                                    }}>
+                                      {line}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          );
+                        })()}
+                        <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
+                          <button className="btn-confirm" onClick={handleConfirmBooking} style={{ flex: 1 }}>
+                            ✅ Confirm Booking
+                          </button>
+                          <button className="btn-confirm" onClick={handleCancelBooking} style={{ flex: 1, backgroundColor: 'var(--danger)', backgroundImage: 'none', boxShadow: 'none' }}>
+                            ❌ Cancel Booking
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {!isOfflineSimulation && !['CONFIRMED', 'CANCELLED', 'FAILED', 'NOT_FOUND'].includes(workflowStatus) && (
+                      <button 
+                        className="btn-kill"
+                        onClick={handleKillBackend}
+                        style={{
+                          marginTop: workflowStatus === 'PENDING_USER_CONFIRMATION' ? '20px' : '0px',
+                          width: '100%',
+                          padding: '12px',
+                          borderRadius: '10px',
+                          border: '1px solid rgba(239, 68, 68, 0.3)',
+                          fontFamily: 'var(--font-heading)',
+                          fontWeight: 700,
+                          fontSize: '0.95rem',
+                          cursor: 'pointer',
+                          background: 'rgba(239, 68, 68, 0.1)',
+                          color: 'var(--danger)',
+                          boxShadow: 'none',
+                          transition: 'all 0.3s'
+                        }}
+                      >
+                        💥 Kill Spring Boot Worker Instance
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Console / Terminal Terminal Card */}
@@ -1037,9 +1668,51 @@ function App() {
         </div>
       )}
 
-      {/* Tab 2: Auditing with Sub-Tabs */}
-      {activeTab === 'auditing' && (
+      {/* Tab 2: Admin Control Panel & Auditing iframe container */}
+      {activeTab === 'admin' && (
         <div className="tab-content iframe-container">
+          
+          {/* Configuration Card */}
+          <div className="glass-card" style={{ marginBottom: '30px', padding: '24px' }}>
+            <h2 className="card-title" style={{ fontSize: '1.2rem', marginBottom: '16px', borderBottom: 'none', paddingBottom: '0px' }}>
+              <span>⚙️</span> Workflow Control Panel
+            </h2>
+            <div style={{ display: 'flex', gap: '30px', alignItems: 'center', flexWrap: 'wrap' }}>
+              <div className="form-group" style={{ margin: 0, minWidth: '320px', flex: 1 }}>
+                <label className="form-label" style={{ marginBottom: '8px', fontSize: '0.8rem', color: 'var(--slate-400)' }}>
+                  ⏳ User Confirmation Timeout (seconds)
+                </label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                  <input 
+                    type="range" 
+                    min="10" 
+                    max="300" 
+                    step="10"
+                    value={configuredTimeout}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value);
+                      setConfiguredTimeout(val);
+                      addLog(`[ADMIN] Configured confirmation timeout changed to ${val} seconds.`, 'info');
+                    }}
+                    style={{ flex: 1, accentColor: 'var(--primary)', cursor: 'pointer' }}
+                  />
+                  <span style={{ 
+                    fontFamily: 'var(--font-mono)', 
+                    fontSize: '1.1rem', 
+                    fontWeight: 700, 
+                    color: 'var(--primary)',
+                    minWidth: '50px',
+                    textAlign: 'right'
+                  }}>
+                    {configuredTimeout}s
+                  </span>
+                </div>
+                <p style={{ margin: '8px 0 0 0', fontSize: '0.75rem', color: 'var(--slate-500)', lineHeight: '1.4' }}>
+                  Sets the duration of the countdown timer before the workflow initiates automatic Saga rollback.
+                </p>
+              </div>
+            </div>
+          </div>
           
           {/* Sub-tab Navigation */}
           <div className="sub-tab-navigation" style={{ display: 'flex', gap: '8px', marginBottom: '24px', borderBottom: '1px solid rgba(255, 255, 255, 0.06)', paddingBottom: '12px' }}>

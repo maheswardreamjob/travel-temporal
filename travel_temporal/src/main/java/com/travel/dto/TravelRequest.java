@@ -23,4 +23,6 @@ public class TravelRequest {
     private boolean simulateFlightFailure;
     private boolean simulateHotelFailure;
     private boolean simulateTransportFailure;
+    private boolean simulatePaymentFailure;
+    private boolean simulateLoyaltyFailure;
 }
