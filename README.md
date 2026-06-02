@@ -44,8 +44,8 @@ flowchart TD
     subgraph Engine ["⏳ TEMPORAL ORCHESTRATION ENGINE"]
         subgraph Parent ["TravelWorkflow (Parent Workflow)"]
             Init["1. Initialize Booking"]
-            Reserve["2. Parallel Booking Activities<br>(Flight, Hotel, Transport)<br>⚡ Saga Compensations Registered"]
-            Advisor["3. Multi-Agent AI Advisory<br>(Parallel Visa & Weather Agents)"]
+            Reserve["2. Parallel Booking Activities(Deterministic)<br>(Flight, Hotel, Transport)<br>⚡ Saga Compensations Registered"]
+            Advisor["3. Multi-Agent AI Advisory(Probabilistic)<br>(Parallel Visa & Weather Agents)"]
             HumanGate["4. Human Approval Gate (Signal)<br>⏱️ Awaits Confirm/Cancel or Timeout"]
         end
         
