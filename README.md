@@ -18,50 +18,88 @@ The portal combines three design paradigms to offer a premium, robust booking ex
 
 ### 📐 High-Level Design (HLD)
 
-The diagram below illustrates the intersection of these three layers:
+The box diagram below illustrates how the frontend layer, backend API gateway, Temporal orchestration engine, and external databases/services interface with each other:
 
 ```mermaid
-graph TD
-    subgraph UI [Frontend UI: travel-approval-ui]
-        Chat[✨ AI Travel Assistant Chat]
-        Form[Manual Booking Parameter Form]
-        Display[Aura AI Advisor Panel]
-    end
+flowchart TD
+    %% Define Styles
+    classDef frontend fill:#2563eb,stroke:#1d4ed8,stroke-width:2px,color:#fff;
+    classDef api fill:#059669,stroke:#047857,stroke-width:2px,color:#fff;
+    classDef temporal fill:#d97706,stroke:#b45309,stroke-width:2px,color:#fff;
+    classDef database fill:#4b5563,stroke:#374151,stroke-width:2px,color:#fff;
 
-    subgraph Assistive [Layer 1: AI Assistive Parsing]
-        AiCtrl[AiController.java /travel/ai/parse]
-        RegexFallback[Local Regex Parser Fallback]
+    subgraph UI ["🖥️ FRONTEND LAYER (React/Vite)"]
+        Chat["✨ AI Assistant Chat (Natural Language Input)"]
+        Form["📋 Booking Form (Structured Inputs)"]
+        Tracker["📊 Live Workflow Pipeline (Status Tracker)"]
     end
+    class Chat,Form,Tracker frontend;
 
-    subgraph Deterministic [Layer 2: Deterministic Saga Orchestration]
-        T_WF[Temporal Parent: TravelWorkflow]
-        P_WF[Temporal Child: PaymentWorkflow]
-        T_Act[TravelActivities: Flight, Hotel, Transport]
+    subgraph API ["⚡ BACKEND API GATEWAY (Spring Boot)"]
+        Controller["TravelWorkflowController<br>(Triggers, Signals, Queries)"]
+        AiParser["AiController (/travel/ai/parse)<br>(Gemini / Local Regex fallback)"]
     end
+    class Controller,AiParser api;
 
-    subgraph Probabilistic [Layer 3: Probabilistic Multi-Agent Orchestration]
-        Ai_Act[AiAdvisoryActivities: Weather & Visa Agents]
-        Gemini[Gemini Flash API URL & Key]
-        PromptProps[prompts.properties Config]
+    subgraph Engine ["⏳ TEMPORAL ORCHESTRATION ENGINE"]
+        subgraph Parent ["TravelWorkflow (Parent Workflow)"]
+            Init["1. Initialize Booking"]
+            Reserve["2. Parallel Booking Activities<br>(Flight, Hotel, Transport)<br>⚡ Saga Compensations Registered"]
+            Advisor["3. Multi-Agent AI Advisory<br>(Parallel Visa & Weather Agents)"]
+            HumanGate["4. Human Approval Gate (Signal)<br>⏱️ Awaits Confirm/Cancel or Timeout"]
+        end
+        
+        subgraph Child ["PaymentWorkflow (Child Workflow)"]
+            Pay["5. Sequential Payments<br>(Credit Card, Invoice, Loyalty)"]
+        end
     end
+    class Init,Reserve,Advisor,HumanGate,Pay,Parent,Child temporal;
 
-    %% Flow of Form Filling
-    Chat -->|1. NL Query| AiCtrl
-    AiCtrl -->|2. Gemini/Fallback Extract| Form
-    
-    %% Flow of Workflow Launch
-    Form -->|3. POST /travel/book| T_WF
-    T_WF -->|4. Parallel Reserv.| T_Act
-    
-    %% Flow of AI Risk Evaluation
-    T_WF -->|5. Evaluate Risks| Ai_Act
-    Ai_Act -->|6. Parallel Query Agents| Gemini
-    Gemini -->|7. Synthesized Advice| T_WF
-    T_WF -->|8. Fetch Advisory| Display
-    
-    %% Flow of Payment child execution
-    T_WF -->|9. Signal Approve| P_WF
+    subgraph Storage ["💾 DATABASE & AI SERVICES"]
+        DB[("H2 Database<br>(Trip, Payment & Booking tables)")]
+        LLM["Gemini LLM API / Local Fallback<br>(Weather & Visa guidelines)"]
+    end
+    class DB,LLM database;
+
+    %% Simple flow lines
+    Chat -->|"Parse NL request"| AiParser
+    AiParser -.->|"Auto-populate fields"| Form
+    Form -->|"Submit /travel/book"| Controller
+    Controller -->|"Start workflow / signal / query"| Parent
+    Parent -->|"Invoke transactional changes"| DB
+    Parent -->|"Run advisory evaluation"| LLM
+    HumanGate -->|"If Confirmed -> Start Child"| Child
+    Tracker -->|"Query real-time status"| Controller
 ```
+
+### 🔄 Core Temporal Features Implemented
+
+This project leverages Temporal's most powerful patterns to build a highly resilient, interactive, and distributed transactional process:
+
+1. **Human-in-the-Loop (Human Workflow & Signals)**
+   * **Concept:** Instead of running purely automated from start to finish, the booking process pauses and waits for user confirmation (an external manual action).
+   * **Implementation:** The workflow blocks execution using `Workflow.await(timeout, () -> confirmed || cancelled);` waiting for a Signal from the controller (`confirm` or `cancel`).
+   
+2. **Saga Pattern (Compensating Transactions)**
+   * **Concept:** Ensures eventual consistency in distributed systems. If a step fails, the system executes compensation logic (reversals) for previously completed steps.
+   * **Implementation:** The workflow registers compensation methods (`cancelFlight()`, `cancelHotel()`, `cancelTransport()`) in a `Saga` object. If any booking activity throws an exception, `saga.compensate()` is automatically triggered, rolling back database changes.
+
+3. **Workflow Timers & Automatic Escalation**
+   * **Concept:** Human workflows need timeouts so they don't block indefinitely.
+   * **Implementation:** The UI lets users dynamically configure the approval timer (from 10s to 300s). The parent workflow uses this duration inside `Workflow.await` to auto-cancel and compensate if the user doesn't respond in time.
+
+4. **Parent/Child Workflow Orchestration**
+   * **Concept:** Splitting complex processes into sub-processes facilitates retry control, security boundaries, and modular development.
+   * **Implementation:** The payment/invoice flow is executed as a child workflow `PaymentWorkflow` from within the parent `TravelWorkflow`.
+
+5. **Asynchronous Parallel Execution**
+   * **Concept:** Speeding up distributed service calls by running non-dependent activities concurrently.
+   * **Implementation:** Booking reservations (`bookFlight`, `bookHotel`, `arrangeTransport`) and AI Risk Advisor agents (Weather, Visa checks) execute concurrently via `Async.function(...)` and `CompletableFuture`.
+
+6. **Worker Crash Resilience (State Reconstruction)**
+   * **Concept:** If backend nodes or workers crash mid-flight, state is not lost.
+   * **Implementation:** Temporal stores the full execution history. Upon restarting a crashed worker, the workflow resumes execution exactly from the last saved state without repeating successfully completed activities.
+
 
 ### 🔍 Low-Level Design (LLD)
 
