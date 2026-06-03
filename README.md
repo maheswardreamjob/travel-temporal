@@ -445,3 +445,18 @@ flowchart TD
 5. **AI Advisory Service (Worker):** A compute-heavy, memory-optimized worker dedicated to interacting with the Gemini API, separated so it doesn't starve the transactional booking workers of resources.
 
 *Temporal acts as the central orchestrator, seamlessly invoking activities across these disparate microservices via task queues, ensuring eventual consistency through Saga compensations even when the services are physically distributed.*
+
+### ⚖️ Architectural Trade-Offs (Monolith vs. Microservices)
+
+While migrating to a distributed microservices architecture offers immense scalability, it introduces several critical trade-offs that must be considered:
+
+#### 🟢 The Benefits (What We Gain)
+*   **Targeted Scalability:** Scale only the components that need it (e.g., spin up 50 AI Advisory workers during high traffic, but keep only 2 Payment workers).
+*   **Security & Compliance:** Hardened boundaries. The Payment Service can be completely isolated in a private, PCI-DSS compliant VPC without restricting the public-facing API Gateway.
+*   **Blast Radius Reduction:** If the Hotel booking system crashes due to an out-of-memory error, the Flight and AI Advisory systems remain fully operational.
+
+#### 🔴 The Costs (What We Pay)
+*   **Operational Complexity:** Instead of deploying one Spring Boot application, DevOps must manage multiple CI/CD pipelines, Docker images, ECS clusters, and routing rules.
+*   **Network Latency:** In a monolith, calling `bookFlight()` takes nanoseconds (in-memory). In microservices, Temporal must route the task over gRPC to an external worker, adding network latency (milliseconds) to every step.
+*   **Distributed Data Consistency:** You can no longer rely on a single `@Transactional` database commit to save a Flight, Hotel, and Payment simultaneously. You are forced to rely on eventual consistency and Saga rollbacks (which Temporal handles, but developers must write the compensation logic carefully).
+*   **Developer Experience (DX):** Running the entire architecture locally on a developer's laptop becomes heavier. It requires Docker Compose to spin up multiple distinct worker containers instead of just running one Java `main()` method.
