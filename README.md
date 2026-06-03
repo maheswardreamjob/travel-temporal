@@ -387,19 +387,61 @@ When deploying to AWS, the architecture is designed to meet strict NFRs:
 
 1. **Scalability:** The API layer (Controllers) scales independently from the background task execution (Workers). If background tasks pile up, ECS Auto Scaling triggers more Fargate instances based on Temporal backlog metrics without affecting the web server.
 2. **High Availability (HA) & Fault Tolerance:** Fargate tasks are distributed across 3 Availability Zones (AZs). If an entire data center goes down, or if the Gemini API experiences an outage, Temporal's native retry engine pauses and retries failures without taking down the portal.
-3. **Security:** Network isolation via Amazon VPC. The ALB handles public traffic, while Worker containers and RDS databases reside strictly in private subnets, pulling credentials dynamically from AWS Secrets Manager via IAM Task execution roles.
+3. **Security:** Network isolation via Amazon VPC. The ALB handles public traffic and integrates **OAuth2 / OIDC** for securing API endpoints (authenticating user requests via JWT tokens). Worker containers and RDS databases reside strictly in private subnets, pulling credentials dynamically from AWS Secrets Manager via IAM Task execution roles.
 4. **Observability:** Distributed tracing is handled via AWS X-Ray and centralized logging via Amazon CloudWatch Logs. Temporal metrics (via Prometheus) integrate with Amazon Managed Grafana to track workflow SLAs.
 
 ---
 
 ## 🔮 Future Architecture (Microservices Evolution)
 
-Currently, `travel_temporal` operates as a "Modular Monolith" for ease of local development. However, as the application and team grow, housing all logic in a single codebase becomes a bottleneck. Because Temporal natively supports decoupled distributed systems, we will break this down into independent microservices:
+Currently, `travel_temporal` operates as a "Modular Monolith" for ease of local development. However, because Temporal natively supports decoupled distributed systems via Task Queues, we can easily break this down into independent microservices.
 
-1. **API Gateway Service:** A lightweight edge service handling HTTP REST/GraphQL queries and proxying them to Temporal as Workflow triggers.
+### When to Migrate to Microservices?
+You should transition from the current Modular Monolith to this Microservices Architecture when:
+1. **Independent Scaling is Required:** For example, if the AI Advisory Service receives heavy traffic and consumes large amounts of memory, it should be scaled independently without unnecessarily duplicating the Payment or Flight booking workers.
+2. **Team Autonomy:** When your engineering team grows and different squads need to own, deploy, and maintain the Flight, Hotel, and Payment components separately without merge conflicts.
+3. **Security Isolation:** When compliance (like PCI-DSS) dictates that payment processing code must live in a completely isolated, locked-down environment (separate subnets/VPCs) away from standard web APIs.
+4. **Polyglot Environments:** If the Data Science team wants to write the `AI Advisory Service` in Python, while the core transactional logic remains in Java. Temporal handles the cross-language orchestration seamlessly.
+
+### Component-Wise Microservices Diagram
+
+```mermaid
+flowchart TD
+    classDef api fill:#059669,stroke:#047857,stroke-width:2px,color:#fff;
+    classDef worker fill:#2563eb,stroke:#1d4ed8,stroke-width:2px,color:#fff;
+    classDef temporal fill:#111827,stroke:#374151,stroke-width:2px,color:#fff;
+    classDef secure fill:#be123c,stroke:#9f1239,stroke-width:2px,color:#fff;
+
+    UI["📱 React UI"]
+    API["⚡ API Gateway (Spring Cloud / ALB)<br/>🔒 OAuth2 JWT Validation"]
+    TC["⏳ Temporal Server<br/>(Task Routing & Orchestration)"]
+    
+    subgraph Microservices ["Distributed Worker Fleet"]
+        FW["✈️ Flight Service<br/>(Listens to 'FLIGHT_TASK_QUEUE')"]
+        HW["🏨 Hotel Service<br/>(Listens to 'HOTEL_TASK_QUEUE')"]
+        AW["🤖 AI Advisory Service<br/>(Python/Java - 'AI_TASK_QUEUE')"]
+        PW["💳 Payment Service<br/>(PCI-DSS Isolated - 'PAYMENT_QUEUE')"]
+    end
+    
+    class API api;
+    class FW,HW,AW worker;
+    class PW secure;
+    class TC temporal;
+
+    UI -->|"HTTP POST /book (OAuth2)"| API
+    API -->|"WorkflowClient.start()"| TC
+    TC -->|"Routes Task"| FW
+    TC -->|"Routes Task"| HW
+    TC -->|"Routes Task"| AW
+    TC -->|"Routes Task"| PW
+```
+
+### Component Breakdown
+
+1. **API Gateway Service:** A lightweight edge service handling HTTP REST/GraphQL queries, enforcing OAuth2 security, and proxying valid requests to Temporal as Workflow triggers.
 2. **Flight Service (Worker):** A dedicated microservice responsible solely for `bookFlight` and `cancelFlight` activities. Scaled independently based on flight traffic.
 3. **Hotel & Transport Services (Workers):** Dedicated microservices managing their respective inventory and bookings.
 4. **Payment Service (Worker):** A highly secure, isolated microservice handling the `PaymentWorkflow`. Resides in a locked-down subnet for strict PCI-DSS compliance.
 5. **AI Advisory Service (Worker):** A compute-heavy, memory-optimized worker dedicated to interacting with the Gemini API, separated so it doesn't starve the transactional booking workers of resources.
 
-*Temporal will act as the central orchestrator, seamlessly invoking activities across these disparate microservices via task queues, ensuring eventual consistency through Saga compensations even when the services are physically distributed.*
+*Temporal acts as the central orchestrator, seamlessly invoking activities across these disparate microservices via task queues, ensuring eventual consistency through Saga compensations even when the services are physically distributed.*
