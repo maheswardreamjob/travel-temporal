@@ -378,3 +378,28 @@ flowchart TD
 ### 4. Data Persistence & Networking
 *   **Amazon RDS for PostgreSQL:** Fully managed relational database. Used by the Spring application for business entity state and the Temporal server (if self-hosted) for workflow state persistence.
 *   **Amazon VPC & NAT Gateway:** Ensure ECS containers and RDS instances sit in private subnets. Use a NAT Gateway to allow Spring Boot workers to securely access the external Gemini API and Temporal Cloud over the internet.
+
+---
+
+## 📈 Non-Functional Requirements (NFR)
+
+When deploying to AWS, the architecture is designed to meet strict NFRs:
+
+1. **Scalability:** The API layer (Controllers) scales independently from the background task execution (Workers). If background tasks pile up, ECS Auto Scaling triggers more Fargate instances based on Temporal backlog metrics without affecting the web server.
+2. **High Availability (HA) & Fault Tolerance:** Fargate tasks are distributed across 3 Availability Zones (AZs). If an entire data center goes down, or if the Gemini API experiences an outage, Temporal's native retry engine pauses and retries failures without taking down the portal.
+3. **Security:** Network isolation via Amazon VPC. The ALB handles public traffic, while Worker containers and RDS databases reside strictly in private subnets, pulling credentials dynamically from AWS Secrets Manager via IAM Task execution roles.
+4. **Observability:** Distributed tracing is handled via AWS X-Ray and centralized logging via Amazon CloudWatch Logs. Temporal metrics (via Prometheus) integrate with Amazon Managed Grafana to track workflow SLAs.
+
+---
+
+## 🔮 Future Architecture (Microservices Evolution)
+
+Currently, `travel_temporal` operates as a "Modular Monolith" for ease of local development. However, as the application and team grow, housing all logic in a single codebase becomes a bottleneck. Because Temporal natively supports decoupled distributed systems, we will break this down into independent microservices:
+
+1. **API Gateway Service:** A lightweight edge service handling HTTP REST/GraphQL queries and proxying them to Temporal as Workflow triggers.
+2. **Flight Service (Worker):** A dedicated microservice responsible solely for `bookFlight` and `cancelFlight` activities. Scaled independently based on flight traffic.
+3. **Hotel & Transport Services (Workers):** Dedicated microservices managing their respective inventory and bookings.
+4. **Payment Service (Worker):** A highly secure, isolated microservice handling the `PaymentWorkflow`. Resides in a locked-down subnet for strict PCI-DSS compliance.
+5. **AI Advisory Service (Worker):** A compute-heavy, memory-optimized worker dedicated to interacting with the Gemini API, separated so it doesn't starve the transactional booking workers of resources.
+
+*Temporal will act as the central orchestrator, seamlessly invoking activities across these disparate microservices via task queues, ensuring eventual consistency through Saga compensations even when the services are physically distributed.*
