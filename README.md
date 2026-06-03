@@ -306,3 +306,75 @@ If you ever see state discrepancies in your local Temporal dev environment and w
     docker compose up -d
     ```
     This will drop all history records and recreate a clean Postgres db from scratch.
+
+---
+
+## ☁️ AWS Production Deployment Architecture
+
+Deploying this portal to AWS involves separating the frontend, backend workers, Temporal engine, and persistence layers into a scalable, production-grade architecture.
+
+```mermaid
+flowchart TD
+    classDef aws_compute fill:#f58536,stroke:#d95b00,stroke-width:2px,color:#fff;
+    classDef aws_network fill:#8c4fff,stroke:#5c1aeb,stroke-width:2px,color:#fff;
+    classDef aws_storage fill:#3f8624,stroke:#1e5a07,stroke-width:2px,color:#fff;
+    classDef aws_frontend fill:#e7157b,stroke:#a10a54,stroke-width:2px,color:#fff;
+    classDef temporal fill:#111827,stroke:#374151,stroke-width:2px,color:#fff;
+
+    Client(["👤 End User"])
+
+    subgraph AWS_Edge ["AWS Edge Network"]
+        CF["🌐 Amazon CloudFront<br>(CDN)"]
+        S3["🪣 Amazon S3<br>(Static React UI)"]
+    end
+    class CF,S3 aws_frontend;
+
+    subgraph AWS_VPC ["AWS VPC (Private Subnets)"]
+        ALB["⚖️ Application Load Balancer"]
+        
+        subgraph Compute ["ECS Cluster"]
+            Fargate["🐳 AWS Fargate (ECS)<br>Spring Boot API & Temporal Workers"]
+        end
+        
+        subgraph Data ["Data Tier"]
+            RDS[("🐘 Amazon RDS<br>(PostgreSQL)")]
+        end
+        
+        NAT["🌍 NAT Gateway"]
+    end
+    class ALB,NAT aws_network;
+    class Fargate aws_compute;
+    class RDS aws_storage;
+
+    subgraph External ["External Managed Services"]
+        TC["⏳ Temporal Cloud<br>(Orchestration Engine)"]
+        Gemini["✨ Google Gemini API<br>(AI Models)"]
+    end
+    class TC temporal;
+
+    Client -->|"Loads Web UI"| CF
+    CF -.->|"Fetches static build"| S3
+    Client -->|"REST API Calls (/travel/*)"| ALB
+    ALB -->|"Routes HTTP traffic"| Fargate
+    Fargate -->|"Reads/Writes App Data"| RDS
+    Fargate <-->|"mTLS Connection (gRPC)"| TC
+    Fargate -->|"Outbound Requests"| NAT
+    NAT -->|"HTTPS Call"| Gemini
+```
+
+### 1. Frontend (React UI)
+*   **Amazon S3:** Host the compiled static UI assets (`npm run build`).
+*   **Amazon CloudFront:** Acts as a global Content Delivery Network (CDN) to serve the UI with low latency, HTTPS/SSL termination, and caching.
+
+### 2. Backend (Spring Boot & Temporal Workers)
+*   **Amazon ECS with AWS Fargate:** Run the Spring Boot application in serverless Docker containers within private subnets. Fargate automatically scales based on worker load.
+*   **Application Load Balancer (ALB):** Routes incoming HTTP REST requests from the React frontend to the Spring Boot API controllers.
+*   **AWS Secrets Manager:** Securely stores the `GEMINI_API_KEY`, database credentials, and Temporal TLS connection certificates.
+
+### 3. Temporal Engine
+*   **Temporal Cloud (Recommended):** The easiest and most reliable way to run Temporal in production. Connect your ECS workers to Temporal Cloud via secure mTLS.
+*   **Self-Hosted Alternative:** Deploy the Temporal cluster components (Frontend, History, Matching, Worker) onto **Amazon EKS** (Kubernetes) or a dedicated ECS Fargate cluster.
+
+### 4. Data Persistence & Networking
+*   **Amazon RDS for PostgreSQL:** Fully managed relational database. Used by the Spring application for business entity state and the Temporal server (if self-hosted) for workflow state persistence.
+*   **Amazon VPC & NAT Gateway:** Ensure ECS containers and RDS instances sit in private subnets. Use a NAT Gateway to allow Spring Boot workers to securely access the external Gemini API and Temporal Cloud over the internet.
