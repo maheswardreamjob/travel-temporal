@@ -460,3 +460,29 @@ While migrating to a distributed microservices architecture offers immense scala
 *   **Network Latency:** In a monolith, calling `bookFlight()` takes nanoseconds (in-memory). In microservices, Temporal must route the task over gRPC to an external worker, adding network latency (milliseconds) to every step.
 *   **Distributed Data Consistency:** You can no longer rely on a single `@Transactional` database commit to save a Flight, Hotel, and Payment simultaneously. You are forced to rely on eventual consistency and Saga rollbacks (which Temporal handles, but developers must write the compensation logic carefully).
 *   **Developer Experience (DX):** Running the entire architecture locally on a developer's laptop becomes heavier. It requires Docker Compose to spin up multiple distinct worker containers instead of just running one Java `main()` method.
+
+---
+
+## 🧠 AI-Specific NFR & Governance (Amazon Bedrock)
+
+When moving generative AI features to production, integrating directly with public APIs (like the public Gemini endpoint) introduces enterprise risk. **Amazon Bedrock** is the ideal solution to run these workloads securely within the AWS ecosystem.
+
+By migrating the `AI Advisory Service` to use Amazon Bedrock, we address several critical AI-specific Non-Functional Requirements:
+
+### 1. Data Privacy & Compliance
+*   **Zero Data Retention:** Amazon Bedrock guarantees that customer prompts and responses are **not** used to train the underlying foundation models.
+*   **Private Connectivity:** Instead of routing traffic over the public internet via a NAT Gateway, the AI Advisory Worker uses **AWS PrivateLink** to communicate with Bedrock entirely within the private AWS network, ensuring strict compliance with GDPR, HIPAA, and corporate data policies.
+
+### 2. AI Guardrails & Toxicity Filtering
+*   **Amazon Bedrock Guardrails:** We can enforce enterprise policies natively before a prompt reaches the model and before the response is returned to the user.
+*   **PII Masking:** Guardrails automatically redact Personally Identifiable Information (like a user's passport details in the Visa check) so it is never processed by the LLM.
+*   **Content Filtering:** Automatically blocks prompt injections and filters out toxic, biased, or harmful travel advice.
+
+### 3. AI Gateway & Token Governance
+*   To manage AI spend, an **AI Gateway** (which can be implemented via Amazon API Gateway or an external proxy) sits between the Temporal Worker and Bedrock.
+*   **Rate Limiting & Quotas:** Enforces token limits per user/tenant to prevent a single user from exhausting the AI budget.
+*   **Cost Observability:** Tags and tracks token usage (input/output tokens) down to the specific Temporal workflow ID for precise cost attribution.
+
+### 4. Model Agility (Token Switching)
+*   **Vendor Lock-in Mitigation:** Amazon Bedrock provides a unified API for multiple models (Anthropic Claude, Amazon Titan, Meta Llama).
+*   **Dynamic Switching:** If a specific model experiences degradation or price changes, the AI Advisory Service can dynamically swap the underlying foundation model by simply changing the Bedrock Model ID configuration, requiring zero code changes or redeployments.
