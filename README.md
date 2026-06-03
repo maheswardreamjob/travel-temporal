@@ -469,6 +469,43 @@ When moving generative AI features to production, integrating directly with publ
 
 By migrating the `AI Advisory Service` to use Amazon Bedrock, we address several critical AI-specific Non-Functional Requirements:
 
+### AI Governance & Private Deployment Diagram
+
+```mermaid
+flowchart TD
+    classDef worker fill:#2563eb,stroke:#1d4ed8,stroke-width:2px,color:#fff;
+    classDef network fill:#8c4fff,stroke:#5c1aeb,stroke-width:2px,color:#fff;
+    classDef security fill:#e11d48,stroke:#be123c,stroke-width:2px,color:#fff;
+    classDef ai fill:#059669,stroke:#047857,stroke-width:2px,color:#fff;
+
+    subgraph VPC ["Amazon VPC (Private Subnet)"]
+        AW["🤖 AI Advisory Worker<br/>(Temporal Activity)"]
+        AIGW["🛡️ AI Gateway<br/>(Token Quotas & Cost Tracking)"]
+        PL["🔗 AWS PrivateLink<br/>(VPC Endpoint)"]
+    end
+    class AW worker;
+    class AIGW security;
+    class PL network;
+
+    subgraph Bedrock ["Amazon Bedrock (Fully Managed)"]
+        GR["🛑 Bedrock Guardrails<br/>(PII Masking & Toxicity Filter)"]
+        
+        subgraph Models ["Foundation Models"]
+            Claude["🧠 Anthropic Claude 3"]
+            Llama["🦙 Meta Llama 3"]
+        end
+    end
+    class GR security;
+    class Claude,Llama ai;
+
+    AW -->|"Sends Prompt"| AIGW
+    AIGW -->|"Enforces Rate Limits"| PL
+    PL -->|"Private AWS Backbone"| GR
+    GR -->|"Filtered Prompt"| Claude
+    Claude -->|"Raw Response"| GR
+    GR -->|"Redacted Response"| AW
+```
+
 ### 1. Data Privacy & Compliance
 *   **Zero Data Retention:** Amazon Bedrock guarantees that customer prompts and responses are **not** used to train the underlying foundation models.
 *   **Private Connectivity:** Instead of routing traffic over the public internet via a NAT Gateway, the AI Advisory Worker uses **AWS PrivateLink** to communicate with Bedrock entirely within the private AWS network, ensuring strict compliance with GDPR, HIPAA, and corporate data policies.
