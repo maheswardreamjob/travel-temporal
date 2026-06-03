@@ -463,28 +463,24 @@ While migrating to a distributed microservices architecture offers immense scala
 
 ---
 
-## 🛡️ Resiliency & Fault Tolerance Architecture
+## 🛡️ Infrastructure Resiliency & Fault Tolerance (The Temporal Advantage)
 
-In a distributed cloud environment, failures are inevitable (network partitions, API rate limits, container crashes). This architecture relies on Temporal's intrinsic capabilities and AWS infrastructure to guarantee resiliency without complex application-level error handling:
+In a distributed cloud environment, infrastructure failures are inevitable (network partitions, container crashes, underlying EC2 termination). This architecture relies on Temporal's intrinsic Event Sourcing capabilities, which provides a paradigm shift in resiliency compared to traditional BPMN orchestration tools (like Camunda or Zeebe).
 
-### 1. Transient API Failures (The Retry Engine)
-If an external service (like the Gemini API or a downstream payment gateway) throws a `503 Service Unavailable` or times out, the developer **does not** need to write `while/catch` loops. 
-*   **How it works:** Temporal automatically pauses the Activity and schedules a retry using an **Exponential Backoff** policy. 
-*   **Impact:** The workflow pauses without blocking CPU threads, effectively acting as a shock-absorber for external API blips until the downstream service recovers.
+### 1. Catastrophic Worker Crashes (Event Sourcing vs. DB Polling)
+The most critical advantage of this architecture is how it handles catastrophic infrastructure failure. If an AWS Fargate container running the `AI Advisory Service` or `Flight Service` runs out of memory or the EC2 node dies mid-execution:
+*   **The Problem with Traditional Tools (e.g., Camunda):** Traditional workflow engines rely heavily on database row-locks and polling. If a worker crashes mid-task, the engine often leaves the task in a locked "stuck" state until a generic timeout is reached, leading to latency spikes and complex manual intervention to unlock the DB row.
+*   **The Temporal Approach (Event Sourcing):** Temporal does not save "current state" in a row. It persists an **append-only Event History** (like a git log for your code execution) into Amazon RDS. 
+*   **The Impact:** If a worker crashes, the task is seamlessly routed to another healthy worker. The new worker *replays* the exact event history from the top of the function. Because Temporal knows exactly which activities (like a credit card charge) have already completed, it skips over them and resumes execution *exactly* from the line of code where the previous worker crashed. **Zero data loss, zero duplicated API calls, and zero manual DB unlocking.**
 
-### 2. Catastrophic Worker Crashes (State Reconstruction)
-If the AWS Fargate container running the `AI Advisory Service` or `Flight Service` runs out of memory or the underlying EC2 instance is terminated mid-execution:
-*   **How it works:** Because Temporal persists every state transition (Event History) into Amazon RDS, the task is simply placed back on the queue. When AWS Auto Scaling spins up a new worker container, Temporal *replays* the exact state.
-*   **Impact:** Zero data loss. The workflow resumes exactly from the line of code where the previous worker crashed. Successfully completed API calls (like a credit card charge) are *not* duplicated.
-
-### 3. Permanent Domain Failures (Distributed Sagas)
-If an activity cannot recover (e.g., the user's credit card is definitively declined after all retries):
+### 2. Permanent Domain Failures (Distributed Sagas)
+If an activity cannot recover natively (e.g., the user's credit card is definitively declined by the bank):
 *   **How it works:** The system catches the final `ActivityFailureException` and automatically triggers the **Saga Compensation** logic.
-*   **Impact:** The parent workflow safely invokes the `cancelFlight` and `cancelHotel` activities, guaranteeing the system returns to a consistent state rather than leaving orphaned bookings in the database.
+*   **Impact:** The parent workflow safely invokes the `cancelFlight` and `cancelHotel` activities, guaranteeing the system returns to a consistent state rather than leaving orphaned, unpaid bookings in the database.
 
-### 4. Third-Party Rate Limits (Circuit Breaking & Throttling)
-When integrating with rate-limited models (like Amazon Bedrock or Gemini), hitting quota limits can poison the worker queue.
-*   **How it works:** An AI API Gateway intercepts the outbound requests. If a `429 Too Many Requests` is detected, Temporal intercepts the specific error and can be configured to back off for a prolonged period (e.g., 5 minutes) rather than hammering the API violently.
+### 3. Third-Party Rate Limits (Circuit Breaking & Throttling)
+When integrating with rate-limited AI models (like Amazon Bedrock or Gemini), hitting quota limits can quickly poison the worker queue in traditional architectures.
+*   **How it works:** If a `429 Too Many Requests` is detected, Temporal intercepts the specific error and is configured to back off for a prolonged period (e.g., 5 minutes) rather than hammering the API violently or failing the workflow outright.
 
 ---
 
