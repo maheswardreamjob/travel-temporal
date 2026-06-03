@@ -1550,7 +1550,65 @@ function App() {
                             content = content.substring(prefix.length).trim();
                             hasHeader = true;
                           }
-                          const lines = content.split('\n').filter(line => line.trim().length > 0);
+                          const rawLines = content.split('\n').filter(line => line.trim().length > 0);
+
+                          // Group lines: a heading line is followed by its body text
+                          const segments = [];
+                          let i = 0;
+                          while (i < rawLines.length) {
+                            const line = rawLines[i].trim();
+
+                            // Pattern 1: [Bracket Header]
+                            const bracketMatch = line.match(/^\[(.+)\]$/);
+                            if (bracketMatch) {
+                              const heading = bracketMatch[1];
+                              // Collect body lines until next heading
+                              const bodyLines = [];
+                              i++;
+                              while (i < rawLines.length) {
+                                const next = rawLines[i].trim();
+                                if (next.match(/^\[.+\]$/) || next.match(/^[💡🌤️🛂✈️☀️🌧️🗼☔🌴🗽⚡]\s+\w/) || next.match(/^\*\*.+\*\*$/)) break;
+                                bodyLines.push(next);
+                                i++;
+                              }
+                              segments.push({ type: 'section', heading, body: bodyLines.join(' ') });
+                              continue;
+                            }
+
+                            // Pattern 2: Label: Value (colon-separated)
+                            const colonIdx = line.indexOf(':');
+                            if (colonIdx > 0 && colonIdx < 60) {
+                              const label = line.substring(0, colonIdx).trim();
+                              const desc  = line.substring(colonIdx + 1).trim();
+                              if (desc.length > 0) {
+                                segments.push({ type: 'section', heading: label, body: desc });
+                                i++;
+                                continue;
+                              }
+                            }
+
+                            // Pattern 3: Short standalone heading line (e.g. "💡 Expert Recommendation")
+                            // Emoji regex breaks on multi-byte chars — use simple length check instead
+                            if (!line.includes(':') && line.length <= 65) {
+                              const heading = line;
+                              const bodyLines = [];
+                              i++;
+                              while (i < rawLines.length) {
+                                const next = rawLines[i].trim();
+                                // Stop when we hit another heading-like line (short, no colon, or bracket)
+                                if (next.match(/^\[.+\]$/) || (!next.includes(':') && next.length <= 65)) break;
+                                bodyLines.push(next);
+                                i++;
+                              }
+                              segments.push({ type: 'section', heading, body: bodyLines.join(' ') });
+                              continue;
+                            }
+
+                            // Fallback: plain long line
+                            segments.push({ type: 'plain', text: line });
+                            i++;
+                          }
+
                           return (
                             <div style={{
                               padding: '16px', borderRadius: '12px', background: 'rgba(28, 62, 42, 0.12)',
@@ -1566,17 +1624,15 @@ function App() {
                                   borderBottom: '1px dashed rgba(16, 185, 129, 0.35)', 
                                   paddingBottom: '8px', 
                                   marginBottom: '12px',
-                                  fontFamily: 'var(--heading)'
+                                  fontFamily: 'var(--heading)',
+                                  letterSpacing: '0.5px'
                                 }}>
                                   ✨ Aura AI Advisor
                                 </div>
                               )}
                               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                                {lines.map((line, idx) => {
-                                  const colonIndex = line.indexOf(':');
-                                  if (colonIndex !== -1) {
-                                    const label = line.substring(0, colonIndex).trim();
-                                    const description = line.substring(colonIndex + 1).trim();
+                                {segments.map((seg, idx) => {
+                                  if (seg.type === 'section') {
                                     return (
                                       <div key={idx} style={{ 
                                         display: 'flex', 
@@ -1595,17 +1651,19 @@ function App() {
                                           textTransform: 'uppercase',
                                           letterSpacing: '0.5px'
                                         }}>
-                                          {label}
+                                          {seg.heading}
                                         </span>
-                                        <span style={{ 
-                                          fontFamily: 'var(--mono)', 
-                                          fontWeight: '400', 
-                                          color: 'var(--text)', 
-                                          fontSize: '0.8rem',
-                                          lineHeight: '1.4'
-                                        }}>
-                                          {description}
-                                        </span>
+                                        {seg.body && (
+                                          <span style={{ 
+                                            fontFamily: 'var(--mono)', 
+                                            fontWeight: '700', 
+                                            color: '#1a1a1a', 
+                                            fontSize: '0.8rem',
+                                            lineHeight: '1.5'
+                                          }}>
+                                            {seg.body}
+                                          </span>
+                                        )}
                                       </div>
                                     );
                                   }
@@ -1616,7 +1674,7 @@ function App() {
                                       color: 'var(--text)', 
                                       fontSize: '0.8rem' 
                                     }}>
-                                      {line}
+                                      {seg.text}
                                     </div>
                                   );
                                 })}
