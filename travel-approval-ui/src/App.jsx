@@ -337,7 +337,7 @@ function App() {
     addLog(`🤖 [AI Chat] Parsing message: "${text.substring(0, 40)}..."`, 'info')
 
     try {
-      const response = await fetch(`${API_BASE}/ai/parse`, {
+      const response = await fetch(`${API_BASE}/ai/chat`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -354,33 +354,34 @@ function App() {
       }
 
       const data = await response.json()
+      const aiResponseText = data.response || 'No response received.'
       
-      // Update form values
-      if (data.userId) setUserId(data.userId)
-      if (data.origin) setOrigin(data.origin)
-      if (data.destination) setDestination(data.destination)
-      if (data.departureDate) setDepartureDate(data.departureDate)
-      if (data.returnDate) setReturnDate(data.returnDate)
-      if (data.travelClass) setTravelClass(data.travelClass)
-      if (data.hotelRating) setHotelRating(data.hotelRating)
-      if (data.transportVehicle) setTransportVehicle(data.transportVehicle)
-      if (data.travelersCount) setTravelersCount(data.travelersCount)
-      if (data.tripType) setTripType(data.tripType)
-      if (data.includeInsurance !== undefined) setIncludeInsurance(data.includeInsurance)
-
-      addLog(`✨ [AI Chat] Successfully parsed! Destination: ${data.destination}, Travelers: ${data.travelersCount}, Class: ${data.travelClass}`, 'success')
-
-      const replyText = `I've prepared your luxury trip details to **${data.destination}**! Here is a summary of your itinerary draft. You can launch this Temporal booking workflow directly using the action buttons below:`
+      addLog(`✨ [AI Chat] Response received from Agent.`, 'success')
 
       setChatMessages((prev) => [
         ...prev,
         {
           id: 'reply-' + Date.now(),
           sender: 'assistant',
-          text: replyText,
-          tripData: data
+          text: aiResponseText
         }
       ])
+
+      // If the AI autonomously triggered the MCP tool to book the trip, it will return the Run ID.
+      // Let's detect that and automatically transition the UI to the tracking dashboard!
+      if (aiResponseText.includes("Run ID:")) {
+        const runIdMatch = aiResponseText.match(/Run ID:\s*([A-Za-z0-9-]+)/);
+        if (runIdMatch && runIdMatch[1]) {
+           const extractedRunId = runIdMatch[1];
+           addLog(`🚀 [MCP SERVER] Detected autonomous workflow execution by AI! Run ID: ${extractedRunId}`, 'success')
+           setWorkflowRunId(extractedRunId);
+           setWorkflowId('travel_' + (userId || 'ai_passenger'));
+           setIsBookingActive(true);
+           setWorkflowStatus('PENDING_START');
+           setActiveTab('application');
+           startStatusPolling(userId || 'ai_passenger');
+        }
+      }
     } catch (err) {
       addLog(`❌ [AI Chat] Parsing failed: ${err.message}`, 'danger')
       setChatMessages((prev) => [
