@@ -12,6 +12,12 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.RestClient;
 import com.travel.config.PromptConfig;
 
+import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
+import org.springframework.ai.chat.memory.ChatMemory;
+import org.springframework.ai.chat.memory.InMemoryChatMemoryRepository;
+import org.springframework.ai.chat.memory.MessageWindowChatMemory;
+
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -35,6 +41,40 @@ public class AiController {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final RestClient restClient = RestClient.builder().build();
+
+    private ChatClient chatClient;
+    private final ChatMemory chatMemory = org.springframework.ai.chat.memory.MessageWindowChatMemory.builder()
+            .chatMemoryRepository(new org.springframework.ai.chat.memory.InMemoryChatMemoryRepository())
+            .maxMessages(100)
+            .build();
+
+    @Autowired
+    public void setChatClientBuilder(ChatClient.Builder chatClientBuilder) {
+        this.chatClient = chatClientBuilder
+                .defaultSystem("You are a helpful travel assistant. You can book trips and check statuses. If you are missing required information to book a trip (like origin, destination, or dates), ask the user for them.")
+                .defaultAdvisors(org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor.builder(this.chatMemory).build())
+                .build();
+    }
+
+    @PostMapping("/chat")
+    public ResponseEntity<Map<String, String>> chatWithAgent(@RequestBody Map<String, String> request) {
+        String prompt = request.get("prompt");
+        String userId = request.getOrDefault("userId", "default_user");
+
+        log.info("🤖 Conversational Agent received prompt: {}", prompt);
+
+        // Uses ChatClient to interact with LLM, remembering history via userId
+        String responseText = this.chatClient.prompt()
+                .user(prompt)
+                .advisors(a -> a.param("chat_memory_conversation_id", userId))
+                .tools("bookTrip", "getTripStatus")
+                .call()
+                .content();
+
+        Map<String, String> response = new HashMap<>();
+        response.put("response", responseText);
+        return ResponseEntity.ok(response);
+    }
 
     @PostMapping("/parse")
     public ResponseEntity<TravelRequest> parseBooking(
